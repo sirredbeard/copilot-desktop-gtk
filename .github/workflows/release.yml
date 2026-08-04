@@ -132,6 +132,10 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
+    outputs:
+      version: ${{ needs.build.outputs.version }}
+      tag: ${{ needs.build.outputs.tag }}
+      page_url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -231,3 +235,33 @@ jobs:
           done
           echo "Timed out waiting for Pages to serve repo/config" >&2
           exit 1
+
+  # Fresh builder container: install from live Pages remote (no .flatpak bundle).
+  verify-pages-install:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull fresh builder image
+        run: |
+          set -euo pipefail
+          docker pull "${{ env.BUILDER }}"
+
+      - name: Install app from Pages Flatpak repo
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          APP_ID: ${{ env.APP_ID }}
+        run: |
+          set -euo pipefail
+          PAGES="https://${OWNER}.github.io/${REPO}/"
+          docker run --rm --privileged             -e PAGES_OWNER="$OWNER"             -e PAGES_REPO="$REPO"             -e FLATPAK_APP_ID="$APP_ID"             -e FLATPAK_REMOTE_NAME="$REPO"             -e FLATPAK_BRANCH=stable             -v "$PWD:/src:ro"             -w /src             "${{ env.BUILDER }}"             ./scripts/verify-flatpak-repo-install.sh "$VERSION" "$PAGES"

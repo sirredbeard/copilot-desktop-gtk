@@ -63,6 +63,7 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 - `next-version.sh` - next patch from latest GitHub release tag; first release uses project version
 - `stamp-version.py` / `stamp-version.sh` - write version into AppConstants/csproj/metainfo for release builds
 - `verify-flatpak-version.sh` - install bundle in temp FLATPAK_USER_DIR and assert Version/License
+- `verify-flatpak-repo-install.sh` - post-Pages: install via remote/flatpakref (no bundle), assert origin + update path
 - `stage-flatpak-pages.sh` - assemble Pages site from ostree repo + flatpakref/repo files
 - `generate-flatpak-repo-index.sh` - index.html + .nojekyll for Pages (no Jekyll, no bare dir 404s)
 
