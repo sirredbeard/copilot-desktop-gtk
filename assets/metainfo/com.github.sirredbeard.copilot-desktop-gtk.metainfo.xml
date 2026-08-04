@@ -61,6 +61,25 @@
     <color type="primary" scheme_preference="light">#5b5fc7</color>
     <color type="primary" scheme_preference="dark">#7f85f5</color>
   </branding>
+  <!-- Screenshots live on the project GitHub Pages site (staged each release). -->
+  <screenshots>
+    <screenshot type="default">
+      <caption>Copilot window on the GNOME desktop</caption>
+      <image type="source" width="1920" height="1080">https://sirredbeard.github.io/copilot-desktop-gtk/screenshots/01-desktop.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Chat home after sign-in</caption>
+      <image type="source" width="1150" height="850">https://sirredbeard.github.io/copilot-desktop-gtk/screenshots/02-chat.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Sign in to Copilot (Microsoft, Apple, Google)</caption>
+      <image type="source" width="1150" height="850">https://sirredbeard.github.io/copilot-desktop-gtk/screenshots/03-sign-in.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Microsoft account sign-in</caption>
+      <image type="source" width="1150" height="850">https://sirredbeard.github.io/copilot-desktop-gtk/screenshots/04-microsoft-account.png</image>
+    </screenshot>
+  </screenshots>
   <releases>
     <release version="0.1.1" date="2026-08-04" type="stable" urgency="medium">
       <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v0.1.1</url>

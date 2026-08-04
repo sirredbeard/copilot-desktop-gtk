@@ -33,6 +33,24 @@ rm -rf "$SITE_DIR"
 mkdir -p "$SITE_DIR"
 cp -a "$OSTREE_REPO" "$SITE_DIR/repo"
 
+# AppStream screenshot media for GNOME Software (URLs in metainfo.xml).
+if [[ -d "$ROOT/assets/screenshots" ]]; then
+  mkdir -p "$SITE_DIR/screenshots"
+  cp -a "$ROOT/assets/screenshots/." "$SITE_DIR/screenshots/"
+  # Simple listing so directory URLs do not 404 under Pages.
+  {
+    echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>screenshots</title></head><body>'
+    echo '<h1>screenshots</h1><ul>'
+    for f in "$SITE_DIR/screenshots"/*; do
+      [[ -f "$f" ]] || continue
+      b="$(basename "$f")"
+      [[ "$b" == index.html ]] && continue
+      echo "<li><a href=\"${b}\">${b}</a></li>"
+    done
+    echo '</ul></body></html>'
+  } > "$SITE_DIR/screenshots/index.html"
+fi
+
 {
   echo "# Flatpak ostree refs @ $(date -u +%Y-%m-%dT%H:%MZ)"
   echo "# base: $repo_url"
