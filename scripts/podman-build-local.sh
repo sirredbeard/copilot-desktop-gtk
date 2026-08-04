@@ -45,22 +45,9 @@ podman run --rm --privileged \
     -v "${ROOT}:/src:Z" \
     -w /src \
     -e COPILOT_RELEASE="${COPILOT_RELEASE:-1}" \
+    -e COPILOT_VERSION="$VERSION" \
     -e FLATPAK_USER_DIR="${FLATPAK_USER_DIR:-/var/lib/flatpak-builder-user}" \
     "$IMAGE" \
-    bash -lc "./scripts/build-all.sh \"$VERSION\" && ./scripts/build-flatpak.sh \"$VERSION\""
-
-podman run --rm --privileged \
-    --security-opt label=disable \
-    -v "${ROOT}:/src:Z" \
-    -w /src \
-    "$IMAGE" \
-    ./scripts/lint-all.sh
-
-podman run --rm --privileged \
-    --security-opt label=disable \
-    -v "${ROOT}:/src:Z" \
-    -w /src \
-    "$IMAGE" \
-    ./scripts/test-smoke.sh
+    bash -lc "./scripts/build-app.sh Release && ./scripts/build-icons.sh && ./scripts/build-flatpak.sh \"$VERSION\" && ./scripts/test-smoke.sh"
 
 echo "local podman build finished"

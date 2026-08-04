@@ -70,8 +70,6 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 - `build-app.sh` - Native AOT publish
 - `build-icons.sh` - icon sizes from logo asset
 - `build-flatpak.sh` - manifest → repo → single-file bundle
-- `build-all.sh` - app + icons
-- `lint-all.sh` - shellcheck, actionlint, desktop-file-validate
 - `test-smoke.sh` - headless smoke of the AOT binary
 
 ## Workflows
