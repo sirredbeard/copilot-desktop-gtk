@@ -119,23 +119,3 @@ jobs:
           set -euo pipefail
           docker push "${{ steps.ver.outputs.tag_latest }}"
           docker push "${{ steps.ver.outputs.tag_date }}"
-
-      - name: Prune legacy GHCR tags
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          PKG: ${{ env.IMAGE_NAME }}
-        run: |
-          set -euo pipefail
-          # Keep only latest and YYYY.MM.DD. Delete sha-/dotnet-/other legacy versions.
-          versions="$(gh api "users/${OWNER}/packages/container/${PKG}/versions" --paginate 2>/dev/null || true)"
-          if [ -z "${versions}" ] || [ "${versions}" = "[]" ]; then
-            versions="$(gh api "orgs/${OWNER}/packages/container/${PKG}/versions" --paginate 2>/dev/null || true)"
-          fi
-          if [ -z "${versions}" ] || [ "${versions}" = "null" ]; then
-            echo "no package versions listed; skip prune"
-            exit 0
-          fi
-          echo "${versions}" > /tmp/pkg-versions.json
-          python3 scripts/prune-builder-tags.py /tmp/pkg-versions.json

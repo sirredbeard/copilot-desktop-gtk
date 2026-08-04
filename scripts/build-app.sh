@@ -31,6 +31,11 @@ mkdir -p "$OUT"
 rm -rf "$OUT"
 
 echo "=== publish Native AOT (${CONFIG}, ${RID}) ==="
+VERSION_ARGS=()
+if [[ -n "${COPILOT_VERSION:-}" ]]; then
+    VERSION_ARGS+=(-p:Version="${COPILOT_VERSION}" -p:InformationalVersion="${COPILOT_VERSION}")
+fi
+
 dotnet publish "$PROJ" \
     -c "$CONFIG" \
     -r "$RID" \
@@ -39,6 +44,7 @@ dotnet publish "$PROJ" \
     -p:PublishTrimmed=true \
     -p:TrimMode=partial \
     -p:StripSymbols=true \
+    "${VERSION_ARGS[@]}" \
     -o "$OUT"
 
 BIN="${OUT}/copilot-desktop-gtk"

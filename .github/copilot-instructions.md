@@ -11,8 +11,8 @@ Not affiliated with Microsoft. Trademark and third-party notices live in `LICENS
 ## Non-negotiable norms
 
 1. **Podman for local builds.** `./scripts/build-builder-image.sh` and `./scripts/podman-build-local.sh`. GHCR image: `ghcr.io/sirredbeard/copilot-desktop-gtk-builder`.
-2. **Automate everything in GitHub Actions.** Lint, AOT build, smoke test, Flatpak bundle, release attach, and the builder image itself. Prefer fixing CI over "works on my machine."
-3. **Builder image is the product build environment.** Azure Linux 4 base (`mcr.microsoft.com/azurelinux-beta/base/core:4.0`), Fedora 43 repos for GTK/WebKit/Flatpak tooling, side-loaded latest .NET 11 preview SDK. Flatpak tooling lives in the image. CI must not `apt-get install flatpak*` on the Ubuntu runner for product builds. Rebuild weekly and on `container/**` changes. Local image builds use **podman**.
+2. **Automate in GitHub Actions.** Weekly builder image + manual release dispatch. Prefer fixing Actions over "works on my machine."
+3. **Builder image is the product build environment.** Azure Linux 4 base (`mcr.microsoft.com/azurelinux-beta/base/core:4.0`), Fedora 43 repos for GTK/WebKit/Flatpak tooling, side-loaded latest .NET 11 preview SDK. Flatpak tooling lives in the image. Release must not install Flatpak tooling on the Ubuntu runner; use the builder image. Rebuild weekly and on `container/**` changes. Local image builds use **podman**.
 4. **Latest toolchains.** Newest .NET 11 preview/RC via `scripts/resolve-dotnet-sdk.sh`, newest GirCore that works, GNOME Flatpak runtime 50 (or current stable).
 5. **.NET best practices.** `net11.0`, Native AOT (`PublishAot`), trimmed self-contained, `OptimizationPreference=Speed`, file-scoped namespaces, nullable enable. Prefer XDG paths. Binary should NEED only libc/libm; GTK/WebKit load at runtime from host or Flatpak runtime.
 6. **Flatpak for the modern desktop path.** `org.gnome.Platform//50`, finish-args for Wayland, network, Pulse/PipeWire, devices (camera), CUPS, host fonts, portals, autostart, persist data dir. Single-file `.flatpak` bundle for Releases. Install LICENSE + complete AppStream metainfo so GNOME Software shows name, license, homepage, VCS, and release notes.
@@ -20,9 +20,9 @@ Not affiliated with Microsoft. Trademark and third-party notices live in `LICENS
 8. **Login must persist.** `WebKit.NetworkSession` with on-disk cookies and website data under XDG. ITP off enough for MS SSO. Smoke tests may use ephemeral sessions.
 9. **Stay inside the WebView for first-party traffic.** `NewWindowAction` must not `Use()` without a create-web-view handler (WebKitGTK will open the default browser). Load allowed hosts in the same window. Allow `copilot.com` / `www.copilot.com` and related Microsoft hosts. Only true external links go through `xdg-open`.
 10. **Writing style.** Docs, comments, commit messages, workflow comments: plain voice. No em-dashes, no decorative emoji, no marketing filler. Spaced hyphen " - " if you need a dash. Precision and brevity over polish.
-11. **Git authoring.** Never add `Co-authored-by`, Copilot trailers, or π signatures. Prefer large bundled squashed commits on `main`.
+11. **Git authoring.** Never add `Co-authored-by`, Copilot trailers, or π signatures. Iterative commits on `main` are fine.
 12. **README hygiene.** User-facing README stays short. Prefer plain lists over tables. Do not mention or compare to other third-party Copilot wrappers.
-13. **Cancel noise.** Aggressively cancel and delete failed/spurious workflow runs after diagnosis. Get logs, fix, squash, re-run.
+13. **Cancel noise.** Aggressively cancel and delete failed/spurious workflow runs after diagnosis. Get logs, fix, commit, re-run.
 
 ## Architecture (short)
 
@@ -40,12 +40,12 @@ Not affiliated with Microsoft. Trademark and third-party notices live in `LICENS
 - clang AOT link fix: copy Fedora `gcc` multilib into `x86_64-azurelinux-linux` triple
 - .NET 11 SDK from release-metadata tarball → `/usr/share/dotnet`
 - Flatpak stack in-image; `FLATPAK_USER_DIR=/var/lib/flatpak-builder-user`
-- Pre-seeded Flathub install: `org.gnome.Platform//50`, `org.gnome.Sdk//50`, Locale for both, `org.freedesktop.Platform.GL.default//25.08` (+extra), `codecs-extra//25.08-extra` so CI does not re-download ~2GB per run. Weekly builder rebuild refreshes them. `build-flatpak.sh` skips install when already present.
+- Pre-seeded Flathub install: `org.gnome.Platform//50`, `org.gnome.Sdk//50`, Locale for both, `org.freedesktop.Platform.GL.default//25.08` (+extra), `codecs-extra//25.08-extra` so release does not re-download ~2GB per run. Weekly builder rebuild refreshes them. `build-flatpak.sh` skips install when already present.
 - Local tag `localhost/copilot-desktop-gtk-builder:latest`. GHCR: `latest` + `YYYY.MM.DD`. Registry `ghcr.io/sirredbeard/copilot-desktop-gtk-builder`
 - Builder image seeds Flatpak runtimes in a privileged post-build container step (not via build-push-action inputs).
-- GHCR builder tags: `latest` and `YYYY.MM.DD` (UTC build date) only. No sha/dotnet/commit tags. `builder-image.yml` prunes legacy versions.
+- GHCR builder tags: `latest` and `YYYY.MM.DD` (UTC build date) only. No sha/dotnet/commit tags.
 
-CI `build` / `release` jobs run **inside** that image with `--privileged` so bwrap works. Host job only does lightweight lint unless the GHCR builder image is missing (run builder-image.yml).
+Release runs **inside** that image with `--privileged` so bwrap works.
 
 ## Flatpak packaging
 
@@ -59,7 +59,8 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 
 ## Scripts
 
-- `prune-builder-tags.py` - delete GHCR builder versions not tagged latest/YYYY.MM.DD
+- `next-version.sh` - next patch from latest GitHub release tag (starts at 0.1.0)
+- `stamp-version.py` / `stamp-version.sh` - write version into AppConstants/csproj/metainfo for release builds
 
 - `seed-flatpak-runtimes.sh` - install GNOME 50 Platform/Sdk/GL/codecs into FLATPAK_USER_DIR
 
@@ -73,13 +74,12 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 - `lint-all.sh` - shellcheck, actionlint, desktop-file-validate
 - `test-smoke.sh` - headless smoke of the AOT binary
 
-## CI / release
+## Workflows
 
-- `builder-image.yml`: build + push to GHCR; weekly cron.
-- `ci.yml`: lint on host; AOT + smoke + Flatpak in builder container; fail if GHCR builder is missing - rebuild via builder-image.yml.
-- `release.yml`: same container path; attach binary and `.flatpak` to GitHub Release (`v*` tag or workflow_dispatch).
+- `builder-image.yml`: build + push builder to GHCR; weekly cron + path filters + manual dispatch. Tags: `latest` and `YYYY.MM.DD`.
+- `release.yml`: manual dispatch only. Auto-bumps patch (0.1.0, 0.1.1, ...), builds AOT + Flatpak in the builder image, creates `vX.Y.Z` and a GitHub Release with binary + `.flatpak`. No separate CI workflow. No tag-push trigger.
 
-After green CI, publish with `gh workflow run release.yml -f version=0.1.0` (or push tag).
+Publish: `gh workflow run release.yml`
 
 ## Size and speed
 
