@@ -101,15 +101,17 @@ if ! grep -E "^${REMOTE_NAME}[[:space:]]" "$WORKDIR/remotes.txt" >/dev/null; the
   exit 1
 fi
 
-remote_url="$(flatpak remote-info --user --show-url "$REMOTE_NAME" 2>/dev/null || true)"
-if [[ -z "$remote_url" ]]; then
-  remote_url="$(awk -v n="$REMOTE_NAME" '$1==n {print $NF; exit}' "$WORKDIR/remotes.txt" || true)"
+# flatpak remotes -d: name, title, url, ... (tabs). Prefer that over remote-info.
+remote_url="$(awk -F'\t' -v n="$REMOTE_NAME" '$1==n {print $3; exit}' "$WORKDIR/remotes.txt" || true)"
+if [[ -z "$remote_url" || "$remote_url" == "-" ]]; then
+  remote_url="$(flatpak remote-info --user --show-url "$REMOTE_NAME" 2>/dev/null || true)"
 fi
 echo "remote url: $remote_url"
 case "$remote_url" in
   *"${OWNER}.github.io/${REPO_NAME}/repo"*) ;;
   *)
     echo "error: remote URL does not point at Pages ostree ($remote_url)" >&2
+    cat "$WORKDIR/remotes.txt" >&2 || true
     exit 1
     ;;
 esac
