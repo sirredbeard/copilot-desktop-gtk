@@ -800,10 +800,15 @@ internal sealed class MainWindow : IDisposable
             var buttons = [];
             collectButtons(document, buttons);
             var yes = null, no = null;
+            // #idSIButton9 is Next on email/password steps AND Yes on KMSI.
+            // Only treat it as Yes when the page is actually "Stay signed in?".
+            var kmsi = pageLooksLikeKmsi();
             for (var i = 0; i < buttons.length; i++) {
               var t = textOf(buttons[i]);
-              if (!yes && (/^yes$/i.test(t) || /^accept$/i.test(t) || buttons[i].id === 'idSIButton9' || buttons[i].id === 'idBtn_Accept')) yes = buttons[i];
-              if (!no && (/^no$/i.test(t) || /^decline$/i.test(t) || buttons[i].id === 'idBtn_Back')) no = buttons[i];
+              if (!yes && (/^yes$/i.test(t) || /^accept$/i.test(t))) yes = buttons[i];
+              if (!yes && kmsi && (buttons[i].id === 'idSIButton9' || buttons[i].id === 'idBtn_Accept')) yes = buttons[i];
+              if (!no && (/^no$/i.test(t) || /^decline$/i.test(t))) no = buttons[i];
+              if (!no && kmsi && buttons[i].id === 'idBtn_Back') no = buttons[i];
             }
             return { yes: yes, no: no, all: buttons };
           }
@@ -876,7 +881,14 @@ internal sealed class MainWindow : IDisposable
 
           function tick() {
             if (!isKmsiHost()) return;
-            if (!pageLooksLikeKmsi() && !document.getElementById('idSIButton9')) return;
+            // Never run force-complete on email/password. MSA reuses
+            // #idSIButton9 for Next; auto-click there POSTs /common/login with
+            // an empty login field (AADSTS90100) and cancels the real navigation.
+            if (!pageLooksLikeKmsi()) {
+              window.__copilotKmsiForceAt = 0;
+              window.__copilotKmsiForced = false;
+              return;
+            }
             var pair = findYesNo();
             diagnose(pair);
             if (pair.yes) {

@@ -81,6 +81,17 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.1.12" date="2026-08-04" type="stable" urgency="high">
+      <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v0.1.12</url>
+      <description>
+        <p>Fix Microsoft sign-in AADSTS90100 from KMSI force-complete.</p>
+        <ul>
+          <li>Do not treat #idSIButton9 as Yes on the email/password steps</li>
+          <li>Force-click Stay signed in only when that page is actually shown</li>
+          <li>Stops empty /common/login posts that canceled real sign-in</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.11" date="2026-08-04" type="stable" urgency="medium">
       <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v0.1.11</url>
       <description>
