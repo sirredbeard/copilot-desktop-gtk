@@ -10,25 +10,22 @@ This project is not affiliated with, sponsored, or endorsed by Microsoft. Micros
 
 ## Install from GitHub
 
-This path adds the `copilot-desktop-gtk` Flatpak remote so later releases
-arrive with `flatpak update` (and GNOME Software when that remote is
-configured).
-
 ```bash
-flatpak install --user flathub org.gnome.Platform//50
 flatpak install --user --from \
   https://sirredbeard.github.io/copilot-desktop-gtk/com.github.sirredbeard.copilot-desktop-gtk.flatpakref
 flatpak run com.github.sirredbeard.copilot-desktop-gtk
 ```
+
+The `.flatpakref` adds the project remote for updates and pulls the GNOME
+runtime from Flathub when needed.
 
 ## Offline artifacts on GitHub Releases
 
 [Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also
 attach:
 
-* A single-file `.flatpak` bundle (built with `--repo-url` pointing at the
-  project Flatpak remote, so install can still register the update remote)
-* A bare Native AOT binary (no Flatpak, no auto-updates)
+* A single-file `.flatpak` bundle
+* A bare Native AOT binary
 
 ## Build with Podman
 

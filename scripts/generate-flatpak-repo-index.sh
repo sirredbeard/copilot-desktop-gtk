@@ -55,8 +55,7 @@ Browsers do not get automatic directory listings here, so this page is the human
 Point a <code>.flatpakrepo</code> / <code>.flatpakref</code> at the site root, or add the remote by URL.
 </p>
 <h2>Install ${APP_TITLE}</h2>
-<pre>flatpak install --user flathub org.gnome.Platform//50
-flatpak install --user --from ${pages_root}${APP_ID}.flatpakref
+<pre>flatpak install --user --from ${pages_root}${APP_ID}.flatpakref
 flatpak run ${APP_ID}</pre>
 <p class="muted">
 The <code>.flatpakref</code> path adds this remote and installs the app so
@@ -111,8 +110,7 @@ cat > "$SITE_DIR/index.html" <<HTML
 <p class="muted">Not affiliated with, sponsored, or endorsed by Microsoft.</p>
 
 <h2>Install (adds this repo for updates)</h2>
-<pre>flatpak install --user flathub org.gnome.Platform//50
-flatpak install --user --from ${pages_root}${APP_ID}.flatpakref
+<pre>flatpak install --user --from ${pages_root}${APP_ID}.flatpakref
 flatpak run ${APP_ID}</pre>
 
 <h2>Add the remote only</h2>
