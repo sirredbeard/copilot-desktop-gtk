@@ -10,10 +10,9 @@ are trademarks of Microsoft.
 
 ## Install from GitHub
 
-Use the project
-[GitHub Pages Flatpak repo](https://sirredbeard.github.io/copilot-desktop-gtk/).
-That path adds the `copilot-desktop-gtk` remote so later releases arrive with
-`flatpak update` (and GNOME Software when that remote is configured).
+This path adds the `copilot-desktop-gtk` Flatpak remote so later releases
+arrive with `flatpak update` (and GNOME Software when that remote is
+configured).
 
 ```bash
 flatpak install --user flathub org.gnome.Platform//50
