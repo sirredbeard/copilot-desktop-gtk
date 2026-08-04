@@ -91,15 +91,53 @@ else
     mkdir -p "$REPO_DIR"
 fi
 
+PAGES_OWNER="${PAGES_OWNER:-sirredbeard}"
+PAGES_REPO="${PAGES_REPO:-copilot-desktop-gtk}"
+# AppStream media base on GitHub Pages. Without compose-url-policy=full,
+# flatpak-builder's default "partial" policy drops absolute screenshot URLs
+# from the repo catalog and GNOME Software shows "No Screenshots".
+MEDIA_BASE_URL="${FLATPAK_MEDIA_BASE_URL:-https://${PAGES_OWNER}.github.io/${PAGES_REPO}/media}"
+
 # --disable-rofiles-fuse: some hosts fail rofiles-fuse mount points under /tmp.
 # flatpak-builder resolves source paths relative to the manifest directory.
 # --default-branch aligns export with manifest branch: stable.
+# --mirror-screenshots-url downloads metainfo screenshots into the build and
+# rewrites them under MEDIA_BASE_URL so Software can fetch thumbnails.
+# --compose-url-policy=full keeps absolute screenshot URLs in appstream.
 flatpak_builder --force-clean --user --disable-rofiles-fuse \
     --repo="$REPO_DIR" \
     --default-branch="$BRANCH" \
     --state-dir="${ROOT}/dist/flatpak-state" \
+    --compose-url-policy=full \
+    --mirror-screenshots-url="$MEDIA_BASE_URL" \
     "$BUILD_DIR" \
     "$MANIFEST"
+
+# Publish mirrored AppStream media for Pages. flatpak-builder + appstreamcli
+# compose write screenshots under files/share/app-info/media/... and rewrite
+# catalog URLs to MEDIA_BASE_URL + that relative path.
+MEDIA_OUT="${ROOT}/dist/flatpak-media"
+rm -rf "$MEDIA_OUT"
+mkdir -p "$MEDIA_OUT"
+MEDIA_SRC=""
+for cand in \
+    "$BUILD_DIR/files/share/app-info/media" \
+    "$BUILD_DIR/screenshots" \
+    "${ROOT}/dist/flatpak-state/screenshots"; do
+    if [[ -d "$cand" ]] && [[ -n "$(find "$cand" -type f 2>/dev/null | head -1)" ]]; then
+        MEDIA_SRC="$cand"
+        break
+    fi
+done
+if [[ -n "$MEDIA_SRC" ]]; then
+    cp -a "$MEDIA_SRC/." "$MEDIA_OUT/"
+    echo "mirrored appstream media ($MEDIA_SRC) -> $MEDIA_OUT"
+    find "$MEDIA_OUT" -type f | head -40
+else
+    echo "warning: no mirrored media dir; copying assets/screenshots" >&2
+    mkdir -p "$MEDIA_OUT/screenshots"
+    cp -a "${ROOT}/assets/screenshots/." "$MEDIA_OUT/screenshots/" 2>/dev/null || true
+fi
 
 # Static deltas make Pages pulls practical (many small objects otherwise).
 flatpak build-update-repo --generate-static-deltas --prune "$REPO_DIR"
@@ -107,8 +145,6 @@ flatpak build-update-repo --generate-static-deltas --prune "$REPO_DIR"
 # --repo-url embeds the ostree remote in the bundle so install (CLI or GNOME
 # Software) can register it for updates. Without this, sideload shows
 # "No Software Repository Included" and Origin stays sideload.
-PAGES_OWNER="${PAGES_OWNER:-sirredbeard}"
-PAGES_REPO="${PAGES_REPO:-copilot-desktop-gtk}"
 REPO_URL="${FLATPAK_REPO_URL:-https://${PAGES_OWNER}.github.io/${PAGES_REPO}/repo/}"
 flatpak build-bundle "$REPO_DIR" "$BUNDLE" "$APP_ID" "$BRANCH" \
     --repo-url="$REPO_URL" \
@@ -116,3 +152,4 @@ flatpak build-bundle "$REPO_DIR" "$BUNDLE" "$APP_ID" "$BRANCH" \
 echo "bundle: $BUNDLE ($(du -h "$BUNDLE" | awk '{print $1}'))"
 echo "repo:   $REPO_DIR"
 echo "repo-url (embedded): $REPO_URL"
+echo "media-base: $MEDIA_BASE_URL"

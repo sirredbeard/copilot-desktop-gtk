@@ -33,22 +33,40 @@ rm -rf "$SITE_DIR"
 mkdir -p "$SITE_DIR"
 cp -a "$OSTREE_REPO" "$SITE_DIR/repo"
 
-# AppStream screenshot media for GNOME Software (URLs in metainfo.xml).
+# AppStream screenshot media for GNOME Software.
+# Prefer mirrored media from build-flatpak.sh (flatpak-builder --mirror-screenshots-url);
+# also keep original assets/screenshots as a stable fallback path.
+write_dir_index() {
+  local dir="$1"
+  local title="$2"
+  {
+    echo "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>${title}</title></head><body>"
+    echo "<h1>${title}</h1><ul>"
+    find "$dir" -maxdepth 1 -type f ! -name index.html -printf '%f\n' 2>/dev/null | sort | while read -r b; do
+      echo "<li><a href=\"${b}\">${b}</a></li>"
+    done
+    # one level of subdirs (mirrored appstream media trees)
+    find "$dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | while read -r d; do
+      echo "<li><a href=\"${d}/\">${d}/</a></li>"
+    done
+    echo '</ul></body></html>'
+  } > "$dir/index.html"
+}
+
+if [[ -d "$ROOT/dist/flatpak-media" ]] && [[ -n "$(find "$ROOT/dist/flatpak-media" -type f 2>/dev/null | head -1)" ]]; then
+  mkdir -p "$SITE_DIR/media"
+  cp -a "$ROOT/dist/flatpak-media/." "$SITE_DIR/media/"
+  write_dir_index "$SITE_DIR/media" "media"
+  # Nested indexes so deep media paths do not 404 as directories.
+  find "$SITE_DIR/media" -type d | while read -r d; do
+    write_dir_index "$d" "$(basename "$d")"
+  done
+fi
+
 if [[ -d "$ROOT/assets/screenshots" ]]; then
   mkdir -p "$SITE_DIR/screenshots"
   cp -a "$ROOT/assets/screenshots/." "$SITE_DIR/screenshots/"
-  # Simple listing so directory URLs do not 404 under Pages.
-  {
-    echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>screenshots</title></head><body>'
-    echo '<h1>screenshots</h1><ul>'
-    for f in "$SITE_DIR/screenshots"/*; do
-      [[ -f "$f" ]] || continue
-      b="$(basename "$f")"
-      [[ "$b" == index.html ]] && continue
-      echo "<li><a href=\"${b}\">${b}</a></li>"
-    done
-    echo '</ul></body></html>'
-  } > "$SITE_DIR/screenshots/index.html"
+  write_dir_index "$SITE_DIR/screenshots" "screenshots"
 fi
 
 {
