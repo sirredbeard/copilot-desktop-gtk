@@ -1,6 +1,11 @@
 # Manual release: auto-bump patch, build AOT + Flatpak in the builder image,
 # publish GitHub Release assets, deploy the ostree repo to GitHub Pages so
 # flatpakref installs get updates via `flatpak update`.
+#
+# One-time Pages setup (GITHUB_TOKEN often cannot create the site):
+#   Settings → Pages → Source: GitHub Actions
+#   or: gh api -X POST repos/OWNER/REPO/pages -f build_type=workflow \
+#         -f source[branch]=main -f source[path]=/
 name: release
 
 on:
@@ -182,8 +187,8 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
+        # enablement needs admin; site must already use Source: GitHub Actions
+        # (one-time: Settings → Pages, or gh api POST .../pages).
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -241,10 +246,13 @@ jobs:
           set -euo pipefail
           url="https://${OWNER}.github.io/${REPO}/repo/config"
           echo "Polling $url"
-          for _ in $(seq 1 24); do
-            if curl --fail --silent --show-error --location "$url" >/dev/null; then
+          for i in $(seq 1 24); do
+            code="$(curl -sS -o /tmp/ostree-config -w '%{http_code}' --location "$url" || true)"
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ] && grep -q '\[core\]' /tmp/ostree-config; then
               echo "Pages Flatpak repo is live"
-              curl -fsSL "https://${OWNER}.github.io/${REPO}/" | head -5
+              head -5 /tmp/ostree-config
+              curl -fsSL "https://${OWNER}.github.io/${REPO}/" | head -8 || true
               exit 0
             fi
             sleep 10
