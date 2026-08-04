@@ -11,6 +11,7 @@ namespace CopilotDesktopGtk;
 internal sealed class CopilotApplication
 {
     private readonly CliOptions _options;
+    private readonly RuntimeProfile _profile;
     private readonly Gtk.Application _app;
     private WebKitSession? _session;
     private MainWindow? _mainWindow;
@@ -18,9 +19,10 @@ internal sealed class CopilotApplication
     private bool _held;
     private bool _toggleOnActivate;
 
-    public CopilotApplication(CliOptions options)
+    public CopilotApplication(CliOptions options, RuntimeProfile profile)
     {
         _options = options;
+        _profile = profile;
         _toggleOnActivate = options.ToggleWindows;
         _app = Gtk.Application.New(AppConstants.ApplicationId, Gio.ApplicationFlags.HandlesOpen);
         _app.OnActivate += OnActivate;
@@ -40,10 +42,23 @@ internal sealed class CopilotApplication
             forwarded.Add(AppConstants.ToggleUri);
         }
 
-        foreach (var a in args)
+        for (var i = 0; i < args.Length; i++)
         {
+            var a = args[i];
             if (a is "--tray" or "--daemon" or "--toggle-windows" or "--toggle"
-                or "--smoke-test" or "--help" or "-h" or "--version" or "-V")
+                or "--smoke-test" or "--help" or "-h" or "--version" or "-V"
+                or "--low-memory" or "--webkit-debug")
+            {
+                continue;
+            }
+
+            if (a is "--hardware-acceleration")
+            {
+                i++; // skip value
+                continue;
+            }
+
+            if (a.StartsWith("--hardware-acceleration=", StringComparison.Ordinal))
             {
                 continue;
             }
@@ -225,6 +240,7 @@ internal sealed class CopilotApplication
             _app,
             _options,
             _session,
+            _profile,
             closeToTray: trayOk,
             onQuit: Quit);
         _mainWindow.Initialize();

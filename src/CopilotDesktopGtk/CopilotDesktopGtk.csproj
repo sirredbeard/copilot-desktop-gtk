@@ -7,8 +7,8 @@
     <Nullable>enable</Nullable>
     <RootNamespace>CopilotDesktopGtk</RootNamespace>
     <AssemblyName>copilot-desktop-gtk</AssemblyName>
-    <Version>0.1.1</Version>
-    <InformationalVersion>0.1.1</InformationalVersion>
+    <Version>0.1.11</Version>
+    <InformationalVersion>0.1.11</InformationalVersion>
     <Authors>Hayden Barnes</Authors>
     <Description>Unofficial GTK4/WebKit wrapper for Microsoft Copilot on the Linux desktop.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

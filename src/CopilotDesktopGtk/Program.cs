@@ -49,6 +49,13 @@ internal static class Program
             return 0;
         }
 
+        // Resolve RAM/GPU profile before WebKit init so compositing env applies.
+        var profile = RuntimeProfile.Resolve(options);
+        if (profile.WebKitDebug || profile.LowMemory)
+        {
+            Console.WriteLine($"copilot-desktop-gtk profile: {profile.Summary}");
+        }
+
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
@@ -67,7 +74,7 @@ internal static class Program
             Console.Error.WriteLine($"adw init skipped: {ex.Message}");
         }
 
-        var app = new CopilotApplication(options);
+        var app = new CopilotApplication(options, profile);
         return app.Run(args);
     }
 }
@@ -80,6 +87,10 @@ internal sealed class CliOptions
     public bool ShowHelp { get; init; }
     public bool ShowVersion { get; init; }
     public bool SmokeTest { get; init; }
+    public bool LowMemory { get; init; }
+    public bool WebKitDebug { get; init; }
+    /// <summary>always | never | auto, or null to use env / defaults.</summary>
+    public string? HardwareAcceleration { get; init; }
     public string? OpenUri { get; init; }
 
     public static CliOptions Parse(string[] args)
@@ -90,10 +101,14 @@ internal sealed class CliOptions
         var help = false;
         var version = false;
         var smoke = false;
+        var lowMemory = false;
+        var webkitDebug = false;
+        string? ha = null;
         string? openUri = null;
 
-        foreach (var arg in args)
+        for (var i = 0; i < args.Length; i++)
         {
+            var arg = args[i];
             switch (arg)
             {
                 case "--tray":
@@ -118,7 +133,25 @@ internal sealed class CliOptions
                 case "--smoke-test":
                     smoke = true;
                     break;
+                case "--low-memory":
+                    lowMemory = true;
+                    break;
+                case "--webkit-debug":
+                    webkitDebug = true;
+                    break;
+                case "--hardware-acceleration":
+                    if (i + 1 < args.Length)
+                    {
+                        ha = args[++i];
+                    }
+                    break;
                 default:
+                    if (arg.StartsWith("--hardware-acceleration=", StringComparison.Ordinal))
+                    {
+                        ha = arg["--hardware-acceleration=".Length..];
+                        break;
+                    }
+
                     if (arg.StartsWith("copilotdesktop:", StringComparison.OrdinalIgnoreCase) ||
                         arg.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
                         arg.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
@@ -137,6 +170,9 @@ internal sealed class CliOptions
             ShowHelp = help,
             ShowVersion = version,
             SmokeTest = smoke,
+            LowMemory = lowMemory,
+            WebKitDebug = webkitDebug,
+            HardwareAcceleration = ha,
             OpenUri = openUri,
         };
     }
@@ -154,9 +190,20 @@ internal sealed class CliOptions
               --tray              Prefer start-hidden when a tray host exists (else window)
               --daemon            Long-running helper mode (same as --tray for this app)
               --toggle-windows    Toggle visibility of the running instance (second launch)
+              --low-memory        Prefer lower WebKit RAM (HA off, smaller cache, no page cache)
+              --hardware-acceleration always|never|auto
+                                  GPU policy (default auto: never on small/low-RAM hosts)
+              --webkit-debug      Print page console.* and profile line to stdout
               --smoke-test        Create the UI, then exit (CI / container check)
               --version, -V       Print version and exit
               --help, -h          Show this help
+
+            Environment:
+              COPILOT_LOW_MEMORY=1
+              COPILOT_HARDWARE_ACCELERATION=always|never|auto
+              COPILOT_WEBKIT_DEBUG=1
+              COPILOT_DISABLE_COMPOSITING=1
+              WEBKIT_DISABLE_COMPOSITING_MODE=1
 
             Notes:
               Default GNOME has no system tray. The app is a normal window there:
@@ -164,6 +211,8 @@ internal sealed class CliOptions
               matter if the host actually exposes a StatusNotifier tray.
               On Wayland, bind a desktop shortcut to
               `copilot-desktop-gtk --toggle-windows` for reliable show/hide.
+              Auto low-memory turns on when MemTotal is at most 6 GiB or
+              MemAvailable is under 2 GiB (typical constrained VMs).
             """);
     }
 }

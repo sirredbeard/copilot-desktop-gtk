@@ -81,6 +81,18 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.1.11" date="2026-08-04" type="stable" urgency="medium">
+      <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v0.1.11</url>
+      <description>
+        <p>Lower WebKit cost on small VMs and stop background work on the main SPA.</p>
+        <ul>
+          <li>Auto low-memory profile (HA off, smaller cache) on tight RAM hosts</li>
+          <li>KMSI unlock scripts only on Microsoft login hosts</li>
+          <li>Page console logging opt-in via --webkit-debug</li>
+          <li>CLI/env overrides for hardware acceleration and low-memory mode</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-08-04" type="stable" urgency="medium">
       <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v0.1.1</url>
       <description>

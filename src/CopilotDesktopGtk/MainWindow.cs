@@ -9,6 +9,7 @@ internal sealed class MainWindow : IDisposable
 {
     private readonly Gtk.Application _app;
     private readonly CliOptions _options;
+    private readonly RuntimeProfile _profile;
     private readonly WebKitSession _session;
     private readonly Action _onQuit;
     private readonly Gtk.ApplicationWindow _window;
@@ -28,18 +29,29 @@ internal sealed class MainWindow : IDisposable
         Gtk.Application app,
         CliOptions options,
         WebKitSession session,
+        RuntimeProfile profile,
         bool closeToTray,
         Action onQuit)
     {
         _app = app;
         _options = options;
+        _profile = profile;
         _session = session;
         _onQuit = onQuit;
         _closeToTray = closeToTray && !options.SmokeTest;
 
         _window = Gtk.ApplicationWindow.New(app);
         _window.Title = AppConstants.AppName;
-        _window.SetDefaultSize(1100, 800);
+        // Smaller default on low-RAM hosts reduces compositor/backing-store cost.
+        if (profile.LowMemory)
+        {
+            _window.SetDefaultSize(960, 700);
+        }
+        else
+        {
+            _window.SetDefaultSize(1100, 800);
+        }
+
         _window.Resizable = true;
         _window.HideOnClose = _closeToTray;
 
@@ -65,15 +77,16 @@ internal sealed class MainWindow : IDisposable
             Console.Error.WriteLine($"icon name skipped: {ex.Message}");
         }
 
-        _webSettings = BuildWebSettings();
+        _webSettings = BuildWebSettings(profile);
         _webView = _session.CreateWebView();
         _webView.SetSettings(_webSettings);
 
         try
         {
             var ctx = WebKit.WebContext.GetDefault();
-            ctx.SetCacheModel(WebKit.CacheModel.WebBrowser);
-            ctx.SetSpellCheckingEnabled(true);
+            ctx.SetCacheModel(profile.CacheModel);
+            // Spellcheck dictionaries cost RAM; skip on constrained hosts.
+            ctx.SetSpellCheckingEnabled(!profile.LowMemory);
         }
         catch (Exception ex)
         {
@@ -115,7 +128,7 @@ internal sealed class MainWindow : IDisposable
         }
     }
 
-    private static WebKit.Settings BuildWebSettings()
+    private static WebKit.Settings BuildWebSettings(RuntimeProfile profile)
     {
         var s = WebKit.Settings.New();
         s.EnableJavascript = true;
@@ -127,12 +140,13 @@ internal sealed class MainWindow : IDisposable
         s.EnableMediasource = true;
         s.EnableEncryptedMedia = true;
         s.EnableWebrtc = true;
-        s.EnableWebgl = true;
-        s.Enable2dCanvasAcceleration = true;
+        s.EnableWebgl = profile.EnableWebgl;
+        s.Enable2dCanvasAcceleration = profile.Enable2dCanvasAcceleration;
         s.EnableHtml5LocalStorage = true;
         s.EnableHtml5Database = true;
-        s.EnablePageCache = true;
-        s.EnableSmoothScrolling = true;
+        // Back-forward page cache keeps whole page snapshots in RAM.
+        s.EnablePageCache = profile.EnablePageCache;
+        s.EnableSmoothScrolling = profile.EnableSmoothScrolling;
         s.EnableFullscreen = true;
         s.EnableSiteSpecificQuirks = true;
         s.EnableDeveloperExtras = false;
@@ -143,10 +157,11 @@ internal sealed class MainWindow : IDisposable
         s.MediaPlaybackAllowsInline = true;
         s.MediaPlaybackRequiresUserGesture = false;
         // WebKitGTK 6 only exposes Always/Never (OnDemand was removed).
-        s.HardwareAccelerationPolicy = WebKit.HardwareAccelerationPolicy.Always;
+        s.HardwareAccelerationPolicy = profile.HardwareAcceleration;
         s.DefaultCharset = "UTF-8";
-        // Surface page console.* during login debugging (harmless in normal use).
-        try { s.EnableWriteConsoleMessagesToStdout = true; } catch { /* older WebKit */ }
+        // Page console.* is noisy (Clarity / CSP). Only mirror when debugging.
+        try { s.EnableWriteConsoleMessagesToStdout = profile.WebKitDebug; }
+        catch { /* older WebKit */ }
 
         // Font stack Microsoft web UIs expect on Linux: prefer metrics-compatible
         // Liberation/Carlito when installed, then Noto, then generic families.
@@ -274,6 +289,10 @@ internal sealed class MainWindow : IDisposable
         _disposed = true;
         try
         {
+            // Give WebProcesses a clean teardown path (avoids noisy
+            // "WebProcess didn't exit as expected" after force-quit under OOM).
+            try { _webView.StopLoading(); } catch { /* ignore */ }
+            try { _webView.LoadUri("about:blank"); } catch { /* ignore */ }
             _window.Destroy();
         }
         catch
@@ -575,6 +594,9 @@ internal sealed class MainWindow : IDisposable
             }
         };
 
+        // Lightweight helpers on every page. Do NOT attach KMSI MutationObserver
+        // / setInterval here - that used to run on copilot.microsoft.com for the
+        // whole session and burned CPU on a busy SPA DOM.
         var pageScript =
             """
             window.copilotDesktop = {
@@ -602,8 +624,7 @@ internal sealed class MainWindow : IDisposable
                 };
               } catch (e) {}
             })();
-            """
-            + KmsiUnlockScript;
+            """;
 
         ucm.AddScript(WebKit.UserScript.New(
             source: pageScript,
@@ -611,7 +632,35 @@ internal sealed class MainWindow : IDisposable
             injectionTime: WebKit.UserScriptInjectionTime.Start,
             allowList: null,
             blockList: null));
+
+        // KMSI unlock only on MSA / Entra login hosts (URI allow-list).
+        ucm.AddScript(WebKit.UserScript.New(
+            source: KmsiUnlockScript,
+            injectedFrames: WebKit.UserContentInjectedFrames.AllFrames,
+            injectionTime: WebKit.UserScriptInjectionTime.Start,
+            allowList: MicrosoftLoginScriptAllowList,
+            blockList: null));
     }
+
+    /// <summary>
+    /// WebKit user-script allow-list patterns for KMSI / login-only injection.
+    /// </summary>
+    private static readonly string[] MicrosoftLoginScriptAllowList =
+    [
+        "https://login.live.com/*",
+        "https://*.login.live.com/*",
+        "https://login.microsoftonline.com/*",
+        "https://*.login.microsoftonline.com/*",
+        "https://login.microsoft.com/*",
+        "https://*.login.microsoft.com/*",
+        "https://account.live.com/*",
+        "https://account.microsoft.com/*",
+        "https://*.account.microsoft.com/*",
+        "https://aadcdn.msauth.net/*",
+        "https://*.aadcdn.msauth.net/*",
+        "https://aadcdn.msftauth.net/*",
+        "https://*.aadcdn.msftauth.net/*",
+    ];
 
     /// <summary>
     /// login.live / login.microsoftonline KMSI and related auth hosts.
@@ -808,7 +857,9 @@ internal sealed class MainWindow : IDisposable
           }
 
           function diagnose(pair) {
+            // Quiet by default; enable with COPILOT_WEBKIT_DEBUG on the host.
             try {
+              if (!window.__copilotKmsiVerbose) return;
               var info = (pair.all || []).slice(0, 12).map(function (b) {
                 return {
                   tag: b.tagName,
@@ -837,7 +888,7 @@ internal sealed class MainWindow : IDisposable
               }
               if (Date.now() >= window.__copilotKmsiForceAt && !window.__copilotKmsiForced) {
                 window.__copilotKmsiForced = true;
-                console.log('copilot-kmsi force-click Yes');
+                if (window.__copilotKmsiVerbose) console.log('copilot-kmsi force-click Yes');
                 fireClick(pair.yes);
                 // Retry a couple times if React re-disables.
                 setTimeout(function () { fireClick(pair.yes); }, 400);
@@ -846,15 +897,26 @@ internal sealed class MainWindow : IDisposable
             }
           }
 
+          function scheduleTick() {
+            if (window.__copilotKmsiTickQueued) return;
+            window.__copilotKmsiTickQueued = true;
+            setTimeout(function () {
+              window.__copilotKmsiTickQueued = false;
+              tick();
+            }, 150);
+          }
+
           try {
+            // Only login hosts get this script (UserScript allow-list).
             tick();
             if (!window.__copilotKmsiUnlockTimer) {
-              window.__copilotKmsiUnlockTimer = setInterval(tick, 400);
+              // 750ms is enough for KMSI; 400ms was needlessly hot.
+              window.__copilotKmsiUnlockTimer = setInterval(tick, 750);
             }
             document.addEventListener('DOMContentLoaded', tick, true);
             window.addEventListener('load', tick, true);
             if (window.MutationObserver && !window.__copilotKmsiMo) {
-              window.__copilotKmsiMo = new MutationObserver(function () { tick(); });
+              window.__copilotKmsiMo = new MutationObserver(scheduleTick);
               try {
                 window.__copilotKmsiMo.observe(document.documentElement || document, {
                   childList: true, subtree: true, attributes: true,
