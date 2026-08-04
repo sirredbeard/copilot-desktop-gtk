@@ -91,11 +91,17 @@ jobs:
             flatpak-ostree-
 
       - name: Build AOT + Flatpak
+        env:
+          FLATPAK_GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           V="${{ steps.ver.outputs.version }}"
           export COPILOT_VERSION="$V"
           export FLATPAK_BRANCH=stable
+          if [[ -z "${FLATPAK_GPG_PRIVATE_KEY:-}" ]]; then
+            echo "error: FLATPAK_GPG_PRIVATE_KEY secret is required to sign the Pages Flatpak repo" >&2
+            exit 1
+          fi
           ./scripts/stamp-version.sh "$V"
           ./scripts/build-app.sh Release
           ./scripts/build-icons.sh

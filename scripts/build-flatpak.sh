@@ -139,8 +139,30 @@ else
     cp -a "${ROOT}/assets/screenshots/." "$MEDIA_OUT/screenshots/" 2>/dev/null || true
 fi
 
-# Static deltas make Pages pulls practical (many small objects otherwise).
-flatpak build-update-repo --generate-static-deltas --prune "$REPO_DIR"
+# GPG-sign the OSTree repo so system Flatpak installs can update without
+# root (avoids "untrusted non-gpg verified remote" via the system helper).
+GPG_HOME=""
+GPG_KEY_ID=""
+if [[ -n "${FLATPAK_GPG_HOME:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY_FILE:-}" ]]; then
+  GPG_HOME="$("${ROOT}/scripts/flatpak-gpg-import.sh")"
+  GPG_KEY_ID="$(cat "${GPG_HOME}/.keyid")"
+  export GNUPGHOME="$GPG_HOME"
+  echo "signing Flatpak repo with key $GPG_KEY_ID"
+  flatpak build-sign --gpg-sign="$GPG_KEY_ID" "$REPO_DIR" || {
+    # Older hosts: sign via ostree directly.
+    ostree --repo="$REPO_DIR" gpg-sign "$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" $(ostree --repo="$REPO_DIR" refs) || true
+  }
+  # Sign summary + static deltas.
+  flatpak build-update-repo --generate-static-deltas --prune     --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR"
+  # Export public key next to repo for stage-flatpak-pages.
+  mkdir -p "${ROOT}/dist"
+  gpg --homedir "$GPG_HOME" --armor --export "$GPG_KEY_ID" > "${ROOT}/dist/flatpak-repo-public.asc"
+else
+  echo "WARNING: no Flatpak GPG key configured; repo will be unsigned" >&2
+  echo "WARNING: unprivileged system updates will fail (UNTRUSTED remote)" >&2
+  # Static deltas make Pages pulls practical (many small objects otherwise).
+  flatpak build-update-repo --generate-static-deltas --prune "$REPO_DIR"
+fi
 
 # --repo-url embeds the ostree remote in the bundle so install (CLI or GNOME
 # Software) can register it for updates. Without this, sideload shows

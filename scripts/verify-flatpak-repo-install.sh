@@ -65,10 +65,15 @@ if ! flatpak info --user org.gnome.Platform//50 >/dev/null 2>&1; then
   flatpak install -y --noninteractive --user flathub org.gnome.Platform//50
 fi
 
-# Unsigned personal stream: register remote with --no-gpg-verify, then install.
-# Same end state as accepting an unsigned .flatpakref (SuggestRemoteName).
+# Prefer signed remote (GPGKey in .flatpakrepo). Fall back to --no-gpg-verify
+# only for legacy unsigned Pages deploys.
 flatpak remote-delete --user "$REMOTE_NAME" >/dev/null 2>&1 || true
-flatpak remote-add --user --no-gpg-verify "$REMOTE_NAME" "$FLATPAKREPO_URL"
+if grep -q '^GPGKey=' "$WORKDIR/remote.flatpakrepo" 2>/dev/null || curl -fsSL "$FLATPAKREPO_URL" | tee "$WORKDIR/remote.flatpakrepo" | grep -q '^GPGKey='; then
+  flatpak remote-add --user "$REMOTE_NAME" "$FLATPAKREPO_URL"
+else
+  echo "warning: unsigned remote; using --no-gpg-verify" >&2
+  flatpak remote-add --user --no-gpg-verify "$REMOTE_NAME" "$FLATPAKREPO_URL"
+fi
 flatpak uninstall -y --noninteractive --user "$APP_ID" >/dev/null 2>&1 || true
 
 # Install from the Pages remote (not a .flatpak bundle).

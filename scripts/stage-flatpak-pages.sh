@@ -78,7 +78,22 @@ fi
   find "$SITE_DIR/repo/refs" -type f 2>/dev/null | sed "s|^$SITE_DIR/repo/||" | sort || true
 } > "$SITE_DIR/repo/manifest.txt"
 
-# Unsigned personal stream (mirror gpgcheck=0 on the RPM Pages pattern).
+# GPG: prefer freshly exported key from build-flatpak.sh, else packaging/.
+GPG_ASC=""
+for cand in "${ROOT}/dist/flatpak-repo-public.asc" "${ROOT}/packaging/flatpak-gpg/public.asc"; do
+  if [[ -s "$cand" ]]; then
+    GPG_ASC="$cand"
+    break
+  fi
+done
+GPG_KEY_LINE=""
+if [[ -n "$GPG_ASC" ]]; then
+  # Flatpak wants one-line base64 of the armored public key.
+  GPG_B64="$(base64 -w0 "$GPG_ASC" 2>/dev/null || base64 "$GPG_ASC" | tr -d '\n')"
+  GPG_KEY_LINE="GPGKey=${GPG_B64}"
+  cp -f "$GPG_ASC" "$SITE_DIR/flatpak-signing-key.asc"
+fi
+
 cat > "$SITE_DIR/${REMOTE_NAME}.flatpakrepo" <<REPO
 [Flatpak Repo]
 Title=${APP_TITLE} (GitHub Pages)
@@ -87,6 +102,7 @@ Homepage=https://github.com/${OWNER}/${REPO_NAME}
 Comment=Unofficial ${APP_TITLE} builds. Not affiliated with Microsoft.
 Description=Personal Flatpak repository hosted on GitHub Pages for ${APP_ID}.
 DefaultBranch=${BRANCH}
+${GPG_KEY_LINE}
 REPO
 
 # One-shot install that also registers the Pages remote for flatpak update.
@@ -101,6 +117,7 @@ SuggestRemoteName=${REMOTE_NAME}
 IsRuntime=false
 Homepage=https://github.com/${OWNER}/${REPO_NAME}
 Comment=Installs ${APP_TITLE} and adds the GitHub Pages remote for updates.
+${GPG_KEY_LINE}
 REF
 
 export PAGES_OWNER="$OWNER"
