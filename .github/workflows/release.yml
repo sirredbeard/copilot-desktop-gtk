@@ -42,12 +42,19 @@ jobs:
         id: ver
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           V="$(./scripts/next-version.sh)"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
           echo "next release: v$V"
+          # Refuse to clobber an existing release tag.
+          if gh release view "v$V" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "error: release v$V already exists" >&2
+            exit 1
+          fi
 
       - name: Stamp version into sources
         run: ./scripts/stamp-version.sh "${{ steps.ver.outputs.version }}"
