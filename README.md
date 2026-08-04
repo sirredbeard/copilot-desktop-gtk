@@ -21,10 +21,9 @@ runtime from Flathub when needed.
 
 ## Offline artifacts on GitHub Releases
 
-[Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also
-attach:
+[Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) include:
 
-* A single-file `.flatpak` bundle
+* A single-file `.flatpak` bundle for side-loading
 * A bare Native AOT binary
 
 ## Build with Podman
@@ -39,8 +38,9 @@ Uses the project builder image (Azure Linux 4 + .NET 11 + Flatpak tooling).
 ./scripts/podman-build-local.sh
 ```
 
-Artifacts land under `dist/publish/` and `dist/flatpak/`. After a local
-Flatpak build you can stage a Pages-shaped tree with:
+Artifacts land under `dist/publish/` and `dist/flatpak/`. 
+
+After a local Flatpak build you can stage a Pages-shaped tree with:
 
 ```bash
 ./scripts/stage-flatpak-pages.sh
@@ -67,5 +67,4 @@ Flatpak on the host (needs `flatpak`, `flatpak-builder` or
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Trademark and third-party notices are in
-[NOTICE](NOTICE).
+MIT. See [LICENSE](LICENSE). Trademark and third-party notices are in [NOTICE](NOTICE).
