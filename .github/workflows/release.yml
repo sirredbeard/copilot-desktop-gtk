@@ -149,13 +149,29 @@ jobs:
           set -euo pipefail
           V="${{ needs.build.outputs.version }}"
           TAG="${{ needs.build.outputs.tag }}"
-          find artifacts -type f | head -50
-          BIN="$(find artifacts -type f -name copilot-desktop-gtk | head -1)"
-          BUNDLE="$(find artifacts -type f -name "com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak" | head -1)"
-          SITE="$(find artifacts -type d -name pages-site | head -1)"
-          test -n "$BIN" && test -x "$BIN" || chmod +x "$BIN"
-          test -f "$BUNDLE"
-          test -d "$SITE" && test -f "$SITE/repo/config"
+          APP_ID="${{ env.APP_ID }}"
+          # upload-artifact keeps paths under dist/ stripped to publish/, flatpak/, pages-site/
+          ls -la artifacts || true
+          ls -la artifacts/publish artifacts/flatpak artifacts/pages-site 2>/dev/null || true
+          BIN=""
+          for cand in             "artifacts/publish/copilot-desktop-gtk"             "artifacts/dist/publish/copilot-desktop-gtk"             "artifacts/copilot-desktop-gtk"; do
+            if [[ -f "$cand" ]]; then BIN="$cand"; break; fi
+          done
+          BUNDLE=""
+          for cand in             "artifacts/flatpak/${APP_ID}-${V}.flatpak"             "artifacts/dist/flatpak/${APP_ID}-${V}.flatpak"             "artifacts/${APP_ID}-${V}.flatpak"; do
+            if [[ -f "$cand" ]]; then BUNDLE="$cand"; break; fi
+          done
+          SITE=""
+          for cand in artifacts/pages-site artifacts/dist/pages-site; do
+            if [[ -d "$cand" ]]; then SITE="$cand"; break; fi
+          done
+          if [[ -z "$BIN" || -z "$BUNDLE" || -z "$SITE" ]]; then
+            echo "missing artifacts (bin='$BIN' bundle='$BUNDLE' site='$SITE')" >&2
+            find artifacts -maxdepth 4 \( -type f -o -type d \) -print | sed -n '1,80p' || true
+            exit 1
+          fi
+          chmod +x "$BIN"
+          test -f "$SITE/repo/config"
           {
             echo "bin=$BIN"
             echo "bundle=$BUNDLE"
