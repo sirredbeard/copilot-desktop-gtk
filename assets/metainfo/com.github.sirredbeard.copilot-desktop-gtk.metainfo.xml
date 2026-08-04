@@ -3,7 +3,7 @@
   <id>com.github.sirredbeard.copilot-desktop-gtk</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
-  <name>Copilot Desktop</name>
+  <name>Copilot</name>
   <summary>Unofficial desktop app for Microsoft Copilot</summary>
   <developer id="com.github.sirredbeard">
     <name>Hayden Barnes</name>
@@ -65,7 +65,7 @@
     <release version="0.1.1" date="2026-08-04" type="stable" urgency="medium">
       <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v0.1.1</url>
       <description>
-        <p>Copilot Desktop 0.1.1.</p>
+        <p>Copilot 0.1.1.</p>
         <ul>
           <li>Stop opening host browser for marketing hops like copilot.fun</li>
           <li>Pure MIT LICENSE with NOTICE for trademarks and third parties</li>

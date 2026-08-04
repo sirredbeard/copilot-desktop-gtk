@@ -59,7 +59,7 @@ def main() -> int:
             '    <release version="%s" date="%s" type="stable" urgency="medium">\n'
             '      <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v%s</url>\n'
             "      <description>\n"
-            "        <p>Copilot Desktop %s.</p>\n"
+            "        <p>Copilot %s.</p>\n"
             "      </description>\n"
             "    </release>\n"
         ) % (version, date, version, version)

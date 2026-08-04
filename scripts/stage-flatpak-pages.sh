@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# stage-flatpak-pages.sh
+#
+# Purpose: Assemble a GitHub Pages site tree from a Flatpak ostree repo:
+#   site/repo (ostree), .flatpakrepo, .flatpakref, index.html, .nojekyll.
+# Usage:   ./scripts/stage-flatpak-pages.sh [OSTREE_REPO] [SITE_DIR]
+# Env:     PAGES_OWNER, PAGES_REPO, FLATPAK_APP_ID, FLATPAK_APP_TITLE,
+#          FLATPAK_BRANCH, FLATPAK_REMOTE_NAME
+# CI:      Yes.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OSTREE_REPO="${1:-${ROOT}/dist/flatpak-repo}"
+SITE_DIR="${2:-${ROOT}/dist/pages-site}"
+
+OWNER="${PAGES_OWNER:-sirredbeard}"
+REPO_NAME="${PAGES_REPO:-copilot-desktop-gtk}"
+APP_ID="${FLATPAK_APP_ID:-com.github.sirredbeard.copilot-desktop-gtk}"
+APP_TITLE="${FLATPAK_APP_TITLE:-Copilot}"
+BRANCH="${FLATPAK_BRANCH:-stable}"
+REMOTE_NAME="${FLATPAK_REMOTE_NAME:-$REPO_NAME}"
+
+pages_root="https://${OWNER}.github.io/${REPO_NAME}/"
+repo_url="${pages_root}repo/"
+
+if [[ ! -f "$OSTREE_REPO/config" ]]; then
+  echo "error: not an ostree repo: $OSTREE_REPO" >&2
+  exit 1
+fi
+
+rm -rf "$SITE_DIR"
+mkdir -p "$SITE_DIR"
+cp -a "$OSTREE_REPO" "$SITE_DIR/repo"
+
+{
+  echo "# Flatpak ostree refs @ $(date -u +%Y-%m-%dT%H:%MZ)"
+  echo "# base: $repo_url"
+  if command -v ostree >/dev/null 2>&1; then
+    ostree --repo="$SITE_DIR/repo" refs 2>/dev/null || true
+  fi
+  find "$SITE_DIR/repo/refs" -type f 2>/dev/null | sed "s|^$SITE_DIR/repo/||" | sort || true
+} > "$SITE_DIR/repo/manifest.txt"
+
+# Unsigned personal stream (mirror gpgcheck=0 on the RPM Pages pattern).
+cat > "$SITE_DIR/${REMOTE_NAME}.flatpakrepo" <<REPO
+[Flatpak Repo]
+Title=${APP_TITLE} (GitHub Pages)
+Url=${repo_url}
+Homepage=https://github.com/${OWNER}/${REPO_NAME}
+Comment=Unofficial ${APP_TITLE} builds. Not affiliated with Microsoft.
+Description=Personal Flatpak repository hosted on GitHub Pages for ${APP_ID}.
+DefaultBranch=${BRANCH}
+REPO
+
+# One-shot install that also registers the Pages remote for flatpak update.
+cat > "$SITE_DIR/${APP_ID}.flatpakref" <<REF
+[Flatpak Ref]
+Title=${APP_TITLE}
+Name=${APP_ID}
+Branch=${BRANCH}
+Url=${repo_url}
+RuntimeRepo=https://dl.flathub.org/repo/flathub.flatpakrepo
+SuggestRemoteName=${REMOTE_NAME}
+IsRuntime=false
+Homepage=https://github.com/${OWNER}/${REPO_NAME}
+Comment=Installs ${APP_TITLE} and adds the GitHub Pages remote for updates.
+REF
+
+export PAGES_OWNER="$OWNER"
+export PAGES_REPO="$REPO_NAME"
+export FLATPAK_APP_ID="$APP_ID"
+export FLATPAK_APP_TITLE="$APP_TITLE"
+export FLATPAK_BRANCH="$BRANCH"
+export FLATPAK_REMOTE_NAME="$REMOTE_NAME"
+"${ROOT}/scripts/generate-flatpak-repo-index.sh" "$SITE_DIR"
+
+echo "staged Pages site at $SITE_DIR"
+find "$SITE_DIR" -maxdepth 2 -type f | head -40

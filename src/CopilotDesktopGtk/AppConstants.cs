@@ -8,8 +8,8 @@ namespace CopilotDesktopGtk;
 internal static class AppConstants
 {
     public const string ApplicationId = "com.github.sirredbeard.copilot-desktop-gtk";
-    public const string AppName = "Copilot Desktop";
-    public const string AppTitle = "Copilot Desktop";
+    public const string AppName = "Copilot";
+    public const string AppTitle = "Copilot";
     public const string AppUrl = "https://copilot.microsoft.com/";
     public const string HomepageUrl = "https://github.com/sirredbeard/copilot-desktop-gtk";
     public const string BugsUrl = "https://github.com/sirredbeard/copilot-desktop-gtk/issues";

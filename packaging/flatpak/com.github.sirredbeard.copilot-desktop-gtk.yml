@@ -5,6 +5,7 @@ app-id: com.github.sirredbeard.copilot-desktop-gtk
 runtime: org.gnome.Platform
 runtime-version: '50'
 sdk: org.gnome.Sdk
+branch: stable
 command: copilot-desktop-gtk
 finish-args:
   # Display
@@ -75,12 +76,12 @@ modules:
       - install -Dm644 icons/hicolor/32x32/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/32x32/apps/com.github.sirredbeard.copilot-desktop-gtk.png
       - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
       - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk %U' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
-      - desktop-file-edit --set-key=Name --set-value='Copilot Desktop' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - desktop-file-edit --set-key=Name --set-value='Copilot' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
       - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/share/copilot-desktop-gtk/copilot-desktop-gtk-daemon.desktop
       - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk --daemon' /app/share/copilot-desktop-gtk/copilot-desktop-gtk-daemon.desktop
       - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
       - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk' /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
-      - desktop-file-edit --set-key=Name --set-value='Copilot Desktop' /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - desktop-file-edit --set-key=Name --set-value='Copilot' /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
     sources:
       - type: file
         path: ../../dist/publish/copilot-desktop-gtk

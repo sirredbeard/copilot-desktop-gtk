@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
 Version=1.5
-Name=Copilot Desktop
+Name=Copilot
 GenericName=Microsoft Copilot
-Comment=Start Copilot Desktop with the session
+Comment=Start Copilot with the session
 Exec=copilot-desktop-gtk
 Icon=copilot-desktop-gtk
 Terminal=false

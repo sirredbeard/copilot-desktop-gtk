@@ -1,5 +1,6 @@
-# Manual release only: auto-bump patch version, build AOT + Flatpak in the
-# builder image, create vX.Y.Z tag, publish GitHub Release assets.
+# Manual release: auto-bump patch, build AOT + Flatpak in the builder image,
+# publish GitHub Release assets, deploy the ostree repo to GitHub Pages so
+# flatpakref installs get updates via `flatpak update`.
 name: release
 
 on:
@@ -8,12 +9,19 @@ on:
 permissions:
   contents: write
   packages: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-pages
+  cancel-in-progress: false
 
 env:
   BUILDER: ghcr.io/sirredbeard/copilot-desktop-gtk-builder:latest
+  APP_ID: com.github.sirredbeard.copilot-desktop-gtk
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/sirredbeard/copilot-desktop-gtk-builder:latest
@@ -21,6 +29,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       options: --user root --privileged
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,7 +61,6 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
           echo "next release: v$V"
-          # Refuse to clobber an existing release tag.
           if gh release view "v$V" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "error: release v$V already exists" >&2
             exit 1
@@ -67,36 +77,157 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Restore Flatpak ostree repo cache
+        uses: actions/cache@v4
+        with:
+          path: dist/flatpak-repo
+          key: flatpak-ostree-${{ github.run_id }}
+          restore-keys: |
+            flatpak-ostree-
+
       - name: Build AOT + Flatpak
         run: |
           set -euo pipefail
           V="${{ steps.ver.outputs.version }}"
           export COPILOT_VERSION="$V"
-          # Single source of truth for this run: stamp before any packaging.
+          export FLATPAK_BRANCH=stable
           ./scripts/stamp-version.sh "$V"
           ./scripts/build-app.sh Release
           ./scripts/build-icons.sh
           ./scripts/test-smoke.sh
           ./scripts/build-flatpak.sh "$V"
           ./scripts/verify-flatpak-version.sh "$V" \
-            "dist/flatpak/com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak"
-          ls -lah dist/publish/ dist/flatpak/
+            "dist/flatpak/${{ env.APP_ID }}-${V}.flatpak"
+          find dist/publish dist/flatpak dist/flatpak-repo -maxdepth 2 -type f -printf '%s %p\n' | sort -n | tail -40
 
-      - name: Create tag and GitHub Release
+      - name: Stage GitHub Pages site
+        env:
+          PAGES_OWNER: ${{ github.repository_owner }}
+          PAGES_REPO: ${{ github.event.repository.name }}
+          FLATPAK_APP_ID: ${{ env.APP_ID }}
+          FLATPAK_APP_TITLE: Copilot
+          FLATPAK_BRANCH: stable
+        run: |
+          set -euo pipefail
+          ./scripts/stage-flatpak-pages.sh dist/flatpak-repo dist/pages-site
+          test -f dist/pages-site/.nojekyll
+          test -f dist/pages-site/index.html
+          test -f dist/pages-site/repo/config
+          test -f "dist/pages-site/${{ env.APP_ID }}.flatpakref"
+          test -f "dist/pages-site/${{ github.event.repository.name }}.flatpakrepo"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.ver.outputs.version }}
+          path: |
+            dist/publish/copilot-desktop-gtk
+            dist/flatpak/${{ env.APP_ID }}-${{ steps.ver.outputs.version }}.flatpak
+            dist/pages-site
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.version }}
+          path: artifacts
+
+      - name: Layout artifacts
+        id: files
+        run: |
+          set -euo pipefail
+          V="${{ needs.build.outputs.version }}"
+          TAG="${{ needs.build.outputs.tag }}"
+          find artifacts -type f | head -50
+          BIN="$(find artifacts -type f -name copilot-desktop-gtk | head -1)"
+          BUNDLE="$(find artifacts -type f -name "com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak" | head -1)"
+          SITE="$(find artifacts -type d -name pages-site | head -1)"
+          test -n "$BIN" && test -x "$BIN" || chmod +x "$BIN"
+          test -f "$BUNDLE"
+          test -d "$SITE" && test -f "$SITE/repo/config"
+          {
+            echo "bin=$BIN"
+            echo "bundle=$BUNDLE"
+            echo "site=$SITE"
+            echo "version=$V"
+            echo "tag=$TAG"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.files.outputs.site }}
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          cd "${GITHUB_WORKSPACE}"
-          V="${{ steps.ver.outputs.version }}"
-          TAG="${{ steps.ver.outputs.tag }}"
-          test -f dist/publish/copilot-desktop-gtk
-          test -f "dist/flatpak/com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak"
-          # Tag + release via API so container job does not need a writable local git.
+          TAG="${{ steps.files.outputs.tag }}"
+          BIN="${{ steps.files.outputs.bin }}"
+          BUNDLE="${{ steps.files.outputs.bundle }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          PAGES="https://${OWNER}.github.io/${REPO}/"
+          notes="$(cat <<NOTES
+          ## Install from GitHub Pages (recommended)
+
+          Adds the project Flatpak remote so \`flatpak update\` gets later releases:
+
+          \`\`\`bash
+          flatpak install --user flathub org.gnome.Platform//50
+          flatpak install --user --from ${PAGES}com.github.sirredbeard.copilot-desktop-gtk.flatpakref
+          flatpak run com.github.sirredbeard.copilot-desktop-gtk
+          \`\`\`
+
+          Repo landing page: ${PAGES}
+
+          ## Single-file bundle
+
+          Offline/sideload \`.flatpak\` attached below (does not register the Pages remote for updates).
+          NOTES
+          )"
+          # strip leading spaces from heredoc for cleaner notes
+          notes="$(printf '%s\n' "$notes" | sed 's/^          //')"
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "$TAG" \
-            --generate-notes \
-            dist/publish/copilot-desktop-gtk \
-            "dist/flatpak/com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak"
+            --notes "$notes" \
+            "$BIN" \
+            "$BUNDLE"
+
+      - name: Wait for Pages repo config
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          url="https://${OWNER}.github.io/${REPO}/repo/config"
+          echo "Polling $url"
+          for _ in $(seq 1 24); do
+            if curl --fail --silent --show-error --location "$url" >/dev/null; then
+              echo "Pages Flatpak repo is live"
+              curl -fsSL "https://${OWNER}.github.io/${REPO}/" | head -5
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for Pages to serve repo/config" >&2
+          exit 1

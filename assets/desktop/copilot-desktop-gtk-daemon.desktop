@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
 Version=1.5
-Name=Copilot Desktop
+Name=Copilot
 GenericName=Microsoft Copilot
-Comment=Copilot Desktop helper
+Comment=Copilot helper
 Exec=copilot-desktop-gtk --daemon
 Icon=copilot-desktop-gtk
 Terminal=false

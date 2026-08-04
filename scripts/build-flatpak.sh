@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # build-flatpak.sh
 #
-# Purpose: Build a Flatpak and a single-file .flatpak bundle from the
-#   prebuilt Native AOT binary.
+# Purpose: Build a Flatpak into an ostree repo and a single-file .flatpak bundle
+#   from the prebuilt Native AOT binary.
 # Usage:   ./scripts/build-flatpak.sh [version]  # default: version from csproj
 # Needs:   flatpak, flatpak-builder, org.gnome.Sdk//50, dist/publish binary
 # CI:      Yes.
+#
+# REPO_DIR (dist/flatpak-repo) is reused when it already looks like an ostree
+# repo so release CI can cache history and generate static deltas for updates.
 
 set -euo pipefail
 
@@ -20,6 +23,7 @@ MANIFEST="${ROOT}/packaging/flatpak/${APP_ID}.yml"
 BUILD_DIR="${ROOT}/dist/flatpak-build"
 REPO_DIR="${ROOT}/dist/flatpak-repo"
 BUNDLE="${ROOT}/dist/flatpak/${APP_ID}-${VERSION}.flatpak"
+BRANCH="${FLATPAK_BRANCH:-stable}"
 
 # Keep AppStream release version in sync with the bundle name.
 "${ROOT}/scripts/stamp-version.sh" "$VERSION"
@@ -36,9 +40,6 @@ flatpak_builder() {
     fi
     if flatpak info --user org.flatpak.Builder >/dev/null 2>&1 || \
        flatpak info org.flatpak.Builder >/dev/null 2>&1; then
-        # Flathub ships the builder as a Flatpak. Needs host FS and an explicit
-        # FLATPAK_USER_DIR so it sees the host user install (org.gnome.Sdk)
-        # instead of the Builder app's private XDG data dir.
         local user_dir="${FLATPAK_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/flatpak}"
         if [[ ! -d "$user_dir" && -d "$HOME/.local/share/flatpak" ]]; then
             user_dir="$HOME/.local/share/flatpak"
@@ -57,7 +58,6 @@ flatpak_builder() {
 
 "${ROOT}/scripts/build-icons.sh" "${ROOT}/dist/icons"
 
-# Ensure runtime/sdk. Builder image seeds GNOME 50; only install on miss.
 ensure_runtime() {
     local runtime="$1" sdk="$2"
     if flatpak info --user "$runtime" >/dev/null 2>&1 && \
@@ -78,15 +78,33 @@ if ! ensure_runtime org.gnome.Platform//50 org.gnome.Sdk//50; then
     MANIFEST="$tmp_manifest"
 fi
 
-rm -rf "$BUILD_DIR" "$REPO_DIR"
+rm -rf "$BUILD_DIR"
 mkdir -p "${ROOT}/dist/flatpak" "$REPO_DIR"
+
+# Reuse an existing ostree repo (CI cache). Only wipe when forced.
+if [[ "${FLATPAK_REPO_RESET:-0}" == "1" ]]; then
+    rm -rf "$REPO_DIR"
+    mkdir -p "$REPO_DIR"
+elif [[ -f "$REPO_DIR/config" ]]; then
+    echo "reusing ostree repo at $REPO_DIR"
+else
+    mkdir -p "$REPO_DIR"
+fi
 
 # --disable-rofiles-fuse: some hosts fail rofiles-fuse mount points under /tmp.
 # flatpak-builder resolves source paths relative to the manifest directory.
-flatpak_builder --force-clean --user --disable-rofiles-fuse --repo="$REPO_DIR" \
+# --default-branch aligns export with manifest branch: stable.
+flatpak_builder --force-clean --user --disable-rofiles-fuse \
+    --repo="$REPO_DIR" \
+    --default-branch="$BRANCH" \
     --state-dir="${ROOT}/dist/flatpak-state" \
     "$BUILD_DIR" \
     "$MANIFEST"
 
-flatpak build-bundle "$REPO_DIR" "$BUNDLE" "$APP_ID" --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo
+# Static deltas make Pages pulls practical (many small objects otherwise).
+flatpak build-update-repo --generate-static-deltas --prune "$REPO_DIR"
+
+flatpak build-bundle "$REPO_DIR" "$BUNDLE" "$APP_ID" "$BRANCH" \
+    --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo
 echo "bundle: $BUNDLE ($(du -h "$BUNDLE" | awk '{print $1}'))"
+echo "repo:   $REPO_DIR"

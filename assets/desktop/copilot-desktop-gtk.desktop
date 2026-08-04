@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Version=1.5
-Name=Copilot Desktop
+Name=Copilot
 GenericName=Microsoft Copilot
 Comment=Unofficial desktop app for Microsoft Copilot
 Exec=copilot-desktop-gtk %U
