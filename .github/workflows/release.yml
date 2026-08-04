@@ -70,11 +70,16 @@ jobs:
       - name: Build AOT + Flatpak
         run: |
           set -euo pipefail
-          export COPILOT_VERSION="${{ steps.ver.outputs.version }}"
+          V="${{ steps.ver.outputs.version }}"
+          export COPILOT_VERSION="$V"
+          # Single source of truth for this run: stamp before any packaging.
+          ./scripts/stamp-version.sh "$V"
           ./scripts/build-app.sh Release
           ./scripts/build-icons.sh
           ./scripts/test-smoke.sh
-          ./scripts/build-flatpak.sh "${{ steps.ver.outputs.version }}"
+          ./scripts/build-flatpak.sh "$V"
+          ./scripts/verify-flatpak-version.sh "$V" \
+            "dist/flatpak/com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak"
           ls -lah dist/publish/ dist/flatpak/
 
       - name: Create tag and GitHub Release

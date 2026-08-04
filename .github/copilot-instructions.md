@@ -62,6 +62,7 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 - `resolve-app-version.sh` - read X.Y.Z from csproj / AppConstants (no hard-coded product version in scripts)
 - `next-version.sh` - next patch from latest GitHub release tag; first release uses project version
 - `stamp-version.py` / `stamp-version.sh` - write version into AppConstants/csproj/metainfo for release builds
+- `verify-flatpak-version.sh` - install bundle in temp FLATPAK_USER_DIR and assert Version/License
 
 - `seed-flatpak-runtimes.sh` - install GNOME 50 Platform/Sdk/GL/codecs into FLATPAK_USER_DIR
 
@@ -79,6 +80,10 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 - `release.yml`: manual dispatch only. Auto-bumps patch (0.1.0, 0.1.1, ...), builds AOT + Flatpak in the builder image, creates `vX.Y.Z` and a GitHub Release with binary + `.flatpak`. No separate CI workflow. No tag-push trigger.
 
 Publish: `gh workflow run release.yml`
+
+Release versioning: `next-version.sh` picks the next patch, `stamp-version.sh` writes it into
+AppConstants/csproj/metainfo, `build-flatpak.sh` stamps again before bundle export, and
+`verify-flatpak-version.sh` fails the job unless `flatpak info` reports that Version and MIT.
 
 ## Size and speed
 

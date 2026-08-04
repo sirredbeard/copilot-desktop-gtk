@@ -16,7 +16,7 @@ internal static class AppConstants
     public const string Author = "Hayden Barnes";
     public const string Description =
         "Unofficial desktop app for Microsoft Copilot on Linux.";
-    public const string Version = "0.1.0";
+    public const string Version = "0.1.1";
     public const string ShowHideShortcutLabel = "Alt+H";
     public const string CustomScheme = "copilotdesktop";
     /// <summary>Open URI used to ferry --toggle-windows across single-instance.</summary>

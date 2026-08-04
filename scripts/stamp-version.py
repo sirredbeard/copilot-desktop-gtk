@@ -20,7 +20,7 @@ def main() -> int:
     text = app_cs.read_text(encoding="utf-8")
     text2, n = re.subn(
         r'public const string Version = "\d+\.\d+\.\d+"',
-        f'public const string Version = "{version}"',
+        'public const string Version = "%s"' % version,
         text,
         count=1,
     )
@@ -30,10 +30,15 @@ def main() -> int:
 
     csproj = root / "src/CopilotDesktopGtk/CopilotDesktopGtk.csproj"
     text = csproj.read_text(encoding="utf-8")
-    text, n1 = re.subn(r"<Version>\d+\.\d+\.\d+</Version>", f"<Version>{version}</Version>", text, count=1)
+    text, n1 = re.subn(
+        r"<Version>\d+\.\d+\.\d+</Version>",
+        "<Version>%s</Version>" % version,
+        text,
+        count=1,
+    )
     text, n2 = re.subn(
         r"<InformationalVersion>\d+\.\d+\.\d+</InformationalVersion>",
-        f"<InformationalVersion>{version}</InformationalVersion>",
+        "<InformationalVersion>%s</InformationalVersion>" % version,
         text,
         count=1,
     )
@@ -41,24 +46,30 @@ def main() -> int:
         raise SystemExit("csproj Version not updated")
     csproj.write_text(text, encoding="utf-8")
 
-    meta = root / "assets/metainfo/com.github.sirredbeard.copilot-desktop-gtk.metainfo.xml"
-    text = meta.read_text(encoding="utf-8")
-    text, n = re.subn(
-        r'(<release version=")[^"]+(" date=")[^"]+(")',
-        rf"\g<1>{version}\g<2>{date}\g<3>",
-        text,
-        count=1,
+    meta_path = root / "assets/metainfo/com.github.sirredbeard.copilot-desktop-gtk.metainfo.xml"
+    text = meta_path.read_text(encoding="utf-8")
+
+    ver_re = re.compile(
+        r'(<release\s+version="%s"[^>]*\bdate=")[^"]+(")' % re.escape(version)
     )
-    text, _ = re.subn(
-        r"(releases/tag/v)\d+\.\d+\.\d+",
-        rf"\g<1>{version}",
-        text,
-        count=1,
-    )
-    if n != 1:
-        raise SystemExit("metainfo release not updated")
-    meta.write_text(text, encoding="utf-8")
-    print(f"stamped {version} ({date})")
+    if ver_re.search(text):
+        text = ver_re.sub(r"\g<1>%s\g<2>" % date, text, count=1)
+    else:
+        block = (
+            '    <release version="%s" date="%s" type="stable" urgency="medium">\n'
+            '      <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v%s</url>\n'
+            "      <description>\n"
+            "        <p>Copilot Desktop %s.</p>\n"
+            "      </description>\n"
+            "    </release>\n"
+        ) % (version, date, version, version)
+        text2, n = re.subn(r"(<releases>\s*)", r"\1" + block, text, count=1)
+        if n != 1:
+            raise SystemExit("metainfo <releases> not found")
+        text = text2
+
+    meta_path.write_text(text, encoding="utf-8")
+    print("stamped %s (%s)" % (version, date))
     return 0
 
 

@@ -21,6 +21,9 @@ BUILD_DIR="${ROOT}/dist/flatpak-build"
 REPO_DIR="${ROOT}/dist/flatpak-repo"
 BUNDLE="${ROOT}/dist/flatpak/${APP_ID}-${VERSION}.flatpak"
 
+# Keep AppStream release version in sync with the bundle name.
+"${ROOT}/scripts/stamp-version.sh" "$VERSION"
+
 if [[ ! -x "${ROOT}/dist/publish/copilot-desktop-gtk" ]]; then
     echo "error: missing AOT binary - run build-app.sh first" >&2
     exit 1
