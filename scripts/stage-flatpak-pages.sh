@@ -80,7 +80,7 @@ fi
 
 # GPG: prefer freshly exported key from build-flatpak.sh, else packaging/.
 GPG_ASC=""
-for cand in "${ROOT}/dist/flatpak-repo-public.asc" "${ROOT}/packaging/flatpak-gpg/public.asc"; do
+for cand in "${ROOT}/dist/flatpak-repo-public.asc" "${ROOT}/packaging/gpg/public.asc" "${ROOT}/packaging/flatpak-gpg/public.asc"; do
   if [[ -s "$cand" ]]; then
     GPG_ASC="$cand"
     break
@@ -91,6 +91,7 @@ if [[ -n "$GPG_ASC" ]]; then
   # Flatpak wants one-line base64 of the armored public key.
   GPG_B64="$(base64 -w0 "$GPG_ASC" 2>/dev/null || base64 "$GPG_ASC" | tr -d '\n')"
   GPG_KEY_LINE="GPGKey=${GPG_B64}"
+  cp -f "$GPG_ASC" "$SITE_DIR/signing-key.asc"
   cp -f "$GPG_ASC" "$SITE_DIR/flatpak-signing-key.asc"
 fi
 

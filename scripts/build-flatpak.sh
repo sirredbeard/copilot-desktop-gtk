@@ -99,10 +99,15 @@ PAGES_REPO="${PAGES_REPO:-copilot-desktop-gtk}"
 MEDIA_BASE_URL="${FLATPAK_MEDIA_BASE_URL:-https://${PAGES_OWNER}.github.io/${PAGES_REPO}/media}"
 
 # Import GPG before export so flatpak-builder can sign app commits on write.
+# Do not blank env GPG_HOME before the presence check (secret names are GPG_*).
+_GPG_HOME_IN="${GPG_HOME:-}"
 GPG_HOME=""
 GPG_KEY_ID=""
 BUILDER_GPG_ARGS=()
-if [[ -n "${FLATPAK_GPG_HOME:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY_FILE:-}" ]]; then
+if [[ -n "${_GPG_HOME_IN}" || -n "${GPG_PRIVATE_KEY:-}" || -n "${GPG_PRIVATE_KEY_FILE:-}" ]]; then
+  if [[ -n "${_GPG_HOME_IN}" ]]; then
+    export GPG_HOME="${_GPG_HOME_IN}"
+  fi
   GPG_HOME="$("${ROOT}/scripts/flatpak-gpg-import.sh")"
   GPG_KEY_ID="$(cat "${GPG_HOME}/.keyid")"
   export GNUPGHOME="$GPG_HOME"

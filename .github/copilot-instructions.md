@@ -78,19 +78,22 @@ Template twin for other apps:
 
 ### Actions secrets (GPG key material)
 
+UID: Hayden Barnes (sirredbeard) <gpg@sirredbeard.github.io>.
+Key id `8DA5774C35DA9BF9`.
+
 Repo secrets on `sirredbeard/copilot-desktop-gtk` (names only via
 `gh secret list -R sirredbeard/copilot-desktop-gtk`):
 
-- `FLATPAK_GPG_PRIVATE_KEY` - armored private key; required by `release.yml`
-- `FLATPAK_GPG_PUBLIC_KEY` - armored public key (same body as
-  `packaging/flatpak-gpg/public.asc`)
-- `FLATPAK_GPG_KEY_ID` - short id (same as `packaging/flatpak-gpg/keyid.txt`)
+- `GPG_PRIVATE_KEY` - armored private key; required by `release.yml`
+- `GPG_PUBLIC_KEY` - armored public key (same body as
+  `packaging/gpg/public.asc`)
+- `GPG_KEY_ID` - short id (same as `packaging/gpg/keyid.txt`)
 
 GitHub never returns secret values after set. Public key is also in git and
 on Pages (`flatpak-signing-key.asc`). Keep a private offline backup outside
 the repo; if the private key is gone, rotate (new key + commit public files +
 re-set secrets + new release). Detail:
-`packaging/flatpak-gpg/README.md`.
+`packaging/gpg/README.md`.
 
 
 Prebuilt AOT binary only. Install:
@@ -110,7 +113,7 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 - `verify-flatpak-repo-install.sh` - post-Pages: install via remote/flatpakref (no bundle), assert origin + update path
 - `stage-flatpak-pages.sh` - assemble Pages site from ostree repo + flatpakref/repo files (`GPGKey=` when public.asc present)
 - `flatpak-gpg-import.sh` - import or generate signing key homedir
-- GPG contract: `packaging/flatpak-gpg/README.md` (sign all tips, then deltas)
+- GPG contract: `packaging/gpg/README.md` (sign all tips, then deltas)
 - `generate-flatpak-repo-index.sh` - index.html + .nojekyll for Pages (no Jekyll, no bare dir 404s)
 
 - `seed-flatpak-runtimes.sh` - install GNOME 50 Platform/Sdk/GL/codecs into FLATPAK_USER_DIR

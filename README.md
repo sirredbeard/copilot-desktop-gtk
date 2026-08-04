@@ -57,10 +57,10 @@ After a local Flatpak build you can stage a Pages-shaped tree with:
 ./scripts/stage-flatpak-pages.sh
 ```
 
-GPG signing for a local Pages tree: set `FLATPAK_GPG_PRIVATE_KEY` or
-`FLATPAK_GPG_HOME`, run `./scripts/build-flatpak.sh` (signs every OSTree tip
+GPG signing for a local Pages tree: set `GPG_PRIVATE_KEY` or
+`GPG_HOME`, run `./scripts/build-flatpak.sh` (signs every OSTree tip
 before static deltas), then stage. See
-[packaging/flatpak-gpg/README.md](packaging/flatpak-gpg/README.md).
+[packaging/gpg/README.md](packaging/gpg/README.md).
 
 ## Build without Podman
 
