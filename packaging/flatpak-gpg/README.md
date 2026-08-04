@@ -24,10 +24,20 @@ show up as:
 
 `GPG verification enabled, but no signatures found`
 
-`scripts/build-flatpak.sh` signs **every** ostree ref tip with
-`ostree gpg-sign` after `flatpak build-update-repo`, then refuses to
-ship a Pages repo if any tip lacks `ostree.gpgsigs`. Summary is signed
-via `flatpak build-update-repo --gpg-sign`.
+`scripts/build-flatpak.sh`:
+
+1. Passes `--gpg-sign` to `flatpak-builder` when a key is available.
+2. Refreshes appstream **without** static deltas.
+3. Signs **every** ref tip with `ostree gpg-sign` (app, appstream,
+   appstream2, screenshots).
+4. **Then** generates static deltas + `summary.sig`.
+5. Fails the build if any tip lacks `ostree.gpgsigs`, or if a local
+   ostree pull that uses static deltas cannot verify the app or
+   appstream2 tip.
+
+Deltas before signatures is a hard fail for Flatpak clients: delta
+pulls do not apply detached `.commitmeta`, so they report "no
+signatures found" even when HTTP `.commitmeta` exists.
 
 ## Files
 

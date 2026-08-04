@@ -98,6 +98,18 @@ PAGES_REPO="${PAGES_REPO:-copilot-desktop-gtk}"
 # from the repo catalog and GNOME Software shows "No Screenshots".
 MEDIA_BASE_URL="${FLATPAK_MEDIA_BASE_URL:-https://${PAGES_OWNER}.github.io/${PAGES_REPO}/media}"
 
+# Import GPG before export so flatpak-builder can sign app commits on write.
+GPG_HOME=""
+GPG_KEY_ID=""
+BUILDER_GPG_ARGS=()
+if [[ -n "${FLATPAK_GPG_HOME:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY_FILE:-}" ]]; then
+  GPG_HOME="$("${ROOT}/scripts/flatpak-gpg-import.sh")"
+  GPG_KEY_ID="$(cat "${GPG_HOME}/.keyid")"
+  export GNUPGHOME="$GPG_HOME"
+  BUILDER_GPG_ARGS=(--gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME")
+  echo "flatpak-builder will GPG-sign with key $GPG_KEY_ID"
+fi
+
 # --disable-rofiles-fuse: some hosts fail rofiles-fuse mount points under /tmp.
 # flatpak-builder resolves source paths relative to the manifest directory.
 # --default-branch aligns export with manifest branch: stable.
@@ -110,6 +122,7 @@ flatpak_builder --force-clean --user --disable-rofiles-fuse \
     --state-dir="${ROOT}/dist/flatpak-state" \
     --compose-url-policy=full \
     --mirror-screenshots-url="$MEDIA_BASE_URL" \
+    "${BUILDER_GPG_ARGS[@]}" \
     "$BUILD_DIR" \
     "$MANIFEST"
 
@@ -142,18 +155,18 @@ fi
 # GPG-sign the OSTree repo so system Flatpak installs can update without
 # root (avoids "untrusted non-gpg verified remote" via the system helper).
 #
-# Important: flatpak build-sign only signs app/* commits. GNOME Software and
-# flatpak update also pull appstream2/x86_64 (and appstream, screenshots).
-# Those tips need ostree.gpgsigs in .commitmeta or clients fail with:
-#   "GPG verification enabled, but no signatures found"
-# Order: update-repo first (may rewrite appstream tips), then sign every
-# ref tip, then resign the summary.
-GPG_HOME=""
-GPG_KEY_ID=""
-if [[ -n "${FLATPAK_GPG_HOME:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY_FILE:-}" ]]; then
-  GPG_HOME="$("${ROOT}/scripts/flatpak-gpg-import.sh")"
-  GPG_KEY_ID="$(cat "${GPG_HOME}/.keyid")"
-  export GNUPGHOME="$GPG_HOME"
+# Critical ordering (0.1.14 regression):
+#   Static delta pulls do NOT apply detached .commitmeta. If deltas are
+#   generated before tips have ostree.gpgsigs, Flatpak fails with:
+#     "GPG verification enabled, but no signatures found"
+# even though HTTP .commitmeta and ostree --disable-static-deltas pulls work.
+#
+# Correct order:
+#   1) refresh appstream WITHOUT deltas
+#   2) ostree gpg-sign every ref tip (app + appstream2 + screenshots)
+#   3) generate static deltas + summary.sig
+#   4) re-check tips still signed; prove a delta pull verifies GPG
+if [[ -n "$GPG_KEY_ID" ]]; then
   echo "signing Flatpak repo with key $GPG_KEY_ID"
 
   if ! command -v ostree >/dev/null 2>&1; then
@@ -161,31 +174,41 @@ if [[ -n "${FLATPAK_GPG_HOME:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY:-}" || -n "${F
     exit 1
   fi
 
-  # Regenerate appstream + static deltas before signing tips.
+  # Drop stale deltas from the ostree cache so we never ship pre-sign deltas.
+  rm -rf "$REPO_DIR/deltas" "$REPO_DIR/delta-indexes"
+
+  # Refresh appstream/summary first WITHOUT static deltas.
+  flatpak build-update-repo --prune \
+    --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR"
+
+  sign_all_tips() {
+    mapfile -t REFS < <(ostree --repo="$REPO_DIR" refs | sort -u)
+    if [[ "${#REFS[@]}" -eq 0 ]]; then
+      echo "error: no ostree refs in $REPO_DIR" >&2
+      return 1
+    fi
+    for ref in "${REFS[@]}"; do
+      commit="$(ostree --repo="$REPO_DIR" rev-parse "$ref")"
+      echo "gpg-sign ref=$ref commit=$commit"
+      ostree --repo="$REPO_DIR" gpg-sign --gpg-homedir="$GPG_HOME" "$commit" "$GPG_KEY_ID"
+    done
+    flatpak build-sign --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR" \
+      || true
+  }
+
+  sign_all_tips
+
+  # NOW generate static deltas from already-signed tips + resign summary.
   flatpak build-update-repo --generate-static-deltas --prune \
     --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR"
 
-  # Sign every ref tip (app, runtime, appstream, appstream2, screenshots).
-  mapfile -t REFS < <(ostree --repo="$REPO_DIR" refs | sort -u)
-  if [[ "${#REFS[@]}" -eq 0 ]]; then
-    echo "error: no ostree refs in $REPO_DIR" >&2
-    exit 1
-  fi
-  for ref in "${REFS[@]}"; do
-    commit="$(ostree --repo="$REPO_DIR" rev-parse "$ref")"
-    echo "gpg-sign ref=$ref commit=$commit"
-    ostree --repo="$REPO_DIR" gpg-sign --gpg-homedir="$GPG_HOME" "$commit" "$GPG_KEY_ID"
-  done
-
-  # Also run flatpak build-sign for app layout (idempotent if already signed).
-  flatpak build-sign --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR" \
-    || true
-
-  # Summary must be resigned after commitmeta changes are published.
+  # update-repo may rewrite appstream tips; sign again if needed, but do NOT
+  # regenerate deltas after this pass (would race with unsigned tips).
+  sign_all_tips
   flatpak build-update-repo \
     --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR"
 
-  # Fail the build if any tip is still missing detached GPG signatures.
+  mapfile -t REFS < <(ostree --repo="$REPO_DIR" refs | sort -u)
   missing=0
   for ref in "${REFS[@]}"; do
     commit="$(ostree --repo="$REPO_DIR" rev-parse "$ref")"
@@ -202,15 +225,34 @@ if [[ -n "${FLATPAK_GPG_HOME:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY:-}" || -n "${F
     echo "error: one or more refs lack ostree.gpgsigs; refusing unsigned Pages deploy" >&2
     exit 1
   fi
-  echo "GPG OK: signed ${#REFS[@]} ref tip(s) + summary.sig"
 
-  # Export public key next to repo for stage-flatpak-pages.
+  # Prove the client path Flatpak uses (static deltas + GPG) succeeds.
+  VERIFY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/flatpak-gpg-verify.XXXXXX")"
+  VERIFY_REPO="$VERIFY_DIR/repo"
+  VERIFY_KEY="$VERIFY_DIR/pub.asc"
+  gpg --homedir "$GPG_HOME" --armor --export "$GPG_KEY_ID" > "$VERIFY_KEY"
+  ostree --repo="$VERIFY_REPO" init --mode=bare-user-only
+  ostree --repo="$VERIFY_REPO" remote add --gpg-import="$VERIFY_KEY" \
+    local "file://${REPO_DIR}"
+  if ! ostree --repo="$VERIFY_REPO" pull --depth=0 local \
+      "app/${APP_ID}/x86_64/${BRANCH}"; then
+    echo "error: GPG static-delta pull of app tip failed" >&2
+    rm -rf "$VERIFY_DIR"
+    exit 1
+  fi
+  if ! ostree --repo="$VERIFY_REPO" pull --depth=0 local appstream2/x86_64; then
+    echo "error: GPG static-delta pull of appstream2 tip failed" >&2
+    rm -rf "$VERIFY_DIR"
+    exit 1
+  fi
+  rm -rf "$VERIFY_DIR"
+  echo "GPG OK: signed ${#REFS[@]} ref tip(s) + summary.sig + delta-pull verified"
+
   mkdir -p "${ROOT}/dist"
   gpg --homedir "$GPG_HOME" --armor --export "$GPG_KEY_ID" > "${ROOT}/dist/flatpak-repo-public.asc"
 else
   echo "WARNING: no Flatpak GPG key configured; repo will be unsigned" >&2
   echo "WARNING: unprivileged system updates will fail (UNTRUSTED remote)" >&2
-  # Static deltas make Pages pulls practical (many small objects otherwise).
   flatpak build-update-repo --generate-static-deltas --prune "$REPO_DIR"
 fi
 
