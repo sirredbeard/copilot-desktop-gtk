@@ -8,7 +8,7 @@ Display name in GNOME is **Copilot**. This project is not affiliated with,
 sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks
 are trademarks of Microsoft.
 
-## Install (updates)
+## Install from GitHub
 
 Use the project
 [GitHub Pages Flatpak repo](https://sirredbeard.github.io/copilot-desktop-gtk/).

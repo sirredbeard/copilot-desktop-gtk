@@ -211,7 +211,7 @@ jobs:
           REPO="${{ github.event.repository.name }}"
           PAGES="https://${OWNER}.github.io/${REPO}/"
           notes="$(cat <<NOTES
-          ## Install (updates)
+          ## Install from GitHub
 
           This is the supported path. It adds the \`copilot-desktop-gtk\` Flatpak
           remote so \`flatpak update\` and GNOME Software can pull later releases.
@@ -230,10 +230,10 @@ jobs:
           ## Artifacts on this release
 
           * \`.flatpak\` bundle - offline install; built with \`--repo-url\` pointing
-            at the Pages ostree so the update remote can still be registered.
-            Opening an older bundle without that metadata in GNOME Software shows
-            **No Software Repository Included** and will not update. Prefer the
-            \`.flatpakref\` above when online.
+            at the project Flatpak remote so the update remote can still be
+            registered. Opening an older bundle without that metadata in GNOME
+            Software shows **No Software Repository Included** and will not
+            update. Prefer the \`.flatpakref\` above when online.
           * \`copilot-desktop-gtk\` - bare Native AOT binary (no Flatpak, no auto-updates).
           NOTES
           )"
