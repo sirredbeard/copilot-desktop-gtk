@@ -64,7 +64,7 @@ flatpak info --user "$APP_ID" >"$WORKDIR/info.txt"
 cat "$WORKDIR/info.txt"
 
 # Version
-if ! grep -E "^Version:\s*${VERSION}$" "$WORKDIR/info.txt"; then
+if ! grep -E "[[:space:]]*Version:[[:space:]]*${VERSION}([[:space:]]|$)" "$WORKDIR/info.txt"; then
   echo "error: expected Version: $VERSION" >&2
   exit 1
 fi
