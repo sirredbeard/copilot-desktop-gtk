@@ -141,6 +141,13 @@ fi
 
 # GPG-sign the OSTree repo so system Flatpak installs can update without
 # root (avoids "untrusted non-gpg verified remote" via the system helper).
+#
+# Important: flatpak build-sign only signs app/* commits. GNOME Software and
+# flatpak update also pull appstream2/x86_64 (and appstream, screenshots).
+# Those tips need ostree.gpgsigs in .commitmeta or clients fail with:
+#   "GPG verification enabled, but no signatures found"
+# Order: update-repo first (may rewrite appstream tips), then sign every
+# ref tip, then resign the summary.
 GPG_HOME=""
 GPG_KEY_ID=""
 if [[ -n "${FLATPAK_GPG_HOME:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY_FILE:-}" ]]; then
@@ -148,12 +155,55 @@ if [[ -n "${FLATPAK_GPG_HOME:-}" || -n "${FLATPAK_GPG_PRIVATE_KEY:-}" || -n "${F
   GPG_KEY_ID="$(cat "${GPG_HOME}/.keyid")"
   export GNUPGHOME="$GPG_HOME"
   echo "signing Flatpak repo with key $GPG_KEY_ID"
-  flatpak build-sign --gpg-sign="$GPG_KEY_ID" "$REPO_DIR" || {
-    # Older hosts: sign via ostree directly.
-    ostree --repo="$REPO_DIR" gpg-sign "$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" $(ostree --repo="$REPO_DIR" refs) || true
-  }
-  # Sign summary + static deltas.
-  flatpak build-update-repo --generate-static-deltas --prune     --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR"
+
+  if ! command -v ostree >/dev/null 2>&1; then
+    echo "error: ostree CLI required to GPG-sign appstream/screenshots refs" >&2
+    exit 1
+  fi
+
+  # Regenerate appstream + static deltas before signing tips.
+  flatpak build-update-repo --generate-static-deltas --prune \
+    --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR"
+
+  # Sign every ref tip (app, runtime, appstream, appstream2, screenshots).
+  mapfile -t REFS < <(ostree --repo="$REPO_DIR" refs | sort -u)
+  if [[ "${#REFS[@]}" -eq 0 ]]; then
+    echo "error: no ostree refs in $REPO_DIR" >&2
+    exit 1
+  fi
+  for ref in "${REFS[@]}"; do
+    commit="$(ostree --repo="$REPO_DIR" rev-parse "$ref")"
+    echo "gpg-sign ref=$ref commit=$commit"
+    ostree --repo="$REPO_DIR" gpg-sign --gpg-homedir="$GPG_HOME" "$commit" "$GPG_KEY_ID"
+  done
+
+  # Also run flatpak build-sign for app layout (idempotent if already signed).
+  flatpak build-sign --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR" \
+    || true
+
+  # Summary must be resigned after commitmeta changes are published.
+  flatpak build-update-repo \
+    --gpg-sign="$GPG_KEY_ID" --gpg-homedir="$GPG_HOME" "$REPO_DIR"
+
+  # Fail the build if any tip is still missing detached GPG signatures.
+  missing=0
+  for ref in "${REFS[@]}"; do
+    commit="$(ostree --repo="$REPO_DIR" rev-parse "$ref")"
+    if ! ostree --repo="$REPO_DIR" show --print-detached-metadata-key=ostree.gpgsigs "$commit" >/dev/null 2>&1; then
+      echo "error: missing GPG signature on ref $ref ($commit)" >&2
+      missing=1
+    fi
+  done
+  if [[ ! -s "$REPO_DIR/summary.sig" ]]; then
+    echo "error: missing $REPO_DIR/summary.sig" >&2
+    missing=1
+  fi
+  if [[ "$missing" -ne 0 ]]; then
+    echo "error: one or more refs lack ostree.gpgsigs; refusing unsigned Pages deploy" >&2
+    exit 1
+  fi
+  echo "GPG OK: signed ${#REFS[@]} ref tip(s) + summary.sig"
+
   # Export public key next to repo for stage-flatpak-pages.
   mkdir -p "${ROOT}/dist"
   gpg --homedir "$GPG_HOME" --armor --export "$GPG_KEY_ID" > "${ROOT}/dist/flatpak-repo-public.asc"
