@@ -38,11 +38,6 @@ flatpak install --user copilot-desktop-gtk \
   com.github.sirredbeard.copilot-desktop-gtk//stable
 ```
 
-After a `.flatpakref` or remote install, `flatpak info` should show
-`Origin: copilot-desktop-gtk` (not `sideload`).
-
-Landing page: https://sirredbeard.github.io/copilot-desktop-gtk/
-
 ## Offline artifacts on GitHub Releases
 
 [Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also
@@ -51,11 +46,6 @@ attach:
 * A single-file `.flatpak` bundle (built with `--repo-url` pointing at the
   project Flatpak remote, so install can still register the update remote)
 * A bare Native AOT binary (no Flatpak, no auto-updates)
-
-Prefer the `.flatpakref` above when you are online. Opening an old `.flatpak`
-in GNOME Software without a repo URL embedded shows **No Software Repository
-Included** and will not update. If you already sideloaded that way, add the
-remote (commands above) or reinstall from the `.flatpakref`.
 
 ## Build with Podman
 
