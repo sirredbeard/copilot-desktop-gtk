@@ -49,7 +49,7 @@ Landing page: https://sirredbeard.github.io/copilot-desktop-gtk/
 attach:
 
 * A single-file `.flatpak` bundle (built with `--repo-url` pointing at the
-  Pages ostree, so install can still register the update remote)
+  project Flatpak remote, so install can still register the update remote)
 * A bare Native AOT binary (no Flatpak, no auto-updates)
 
 Prefer the `.flatpakref` above when you are online. Opening an old `.flatpak`
