@@ -1,12 +1,12 @@
-# copilot-desktop-gtk
+# Copilot
 
 Unofficial Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.com).
 
-.NET 11, GTK4, WebKitGTK, Flatpak.
+<img width="1150" height="850" alt="Screenshot From 2026-08-04 04-45-27" src="https://github.com/user-attachments/assets/dc65f927-0c6d-4a34-afe6-49bb4934d29b" />
 
-Display name in GNOME is **Copilot**. This project is not affiliated with,
-sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks
-are trademarks of Microsoft.
+Built with .NET 11, GTK4, and WebKitGTK, shipped via Flatpak.
+
+This project is not affiliated with, sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks are trademarks of Microsoft.
 
 ## Install from GitHub
 
@@ -19,23 +19,6 @@ flatpak install --user flathub org.gnome.Platform//50
 flatpak install --user --from \
   https://sirredbeard.github.io/copilot-desktop-gtk/com.github.sirredbeard.copilot-desktop-gtk.flatpakref
 flatpak run com.github.sirredbeard.copilot-desktop-gtk
-```
-
-Later:
-
-```bash
-flatpak update
-# or: GNOME Software → Updates
-```
-
-Remote only:
-
-```bash
-flatpak remote-add --if-not-exists --user --no-gpg-verify \
-  copilot-desktop-gtk \
-  https://sirredbeard.github.io/copilot-desktop-gtk/copilot-desktop-gtk.flatpakrepo
-flatpak install --user copilot-desktop-gtk \
-  com.github.sirredbeard.copilot-desktop-gtk//stable
 ```
 
 ## Offline artifacts on GitHub Releases
