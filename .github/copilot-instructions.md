@@ -57,7 +57,7 @@ remotes (`Can't pull from untrusted non-gpg verified remote`).
 
 Contract (`scripts/build-flatpak.sh` + `packaging/flatpak-gpg/`):
 
-1. Import key (`FLATPAK_GPG_PRIVATE_KEY` in CI, or local GPG home).
+1. Import key from Actions secrets (see below) or local GPG home.
 2. Refresh appstream **without** static deltas.
 3. `ostree gpg-sign` **every** ref tip: `app/*`, `appstream2/x86_64`,
    `appstream/x86_64`, `screenshots/x86_64`. `flatpak build-sign` alone is
@@ -74,6 +74,24 @@ Contract (`scripts/build-flatpak.sh` + `packaging/flatpak-gpg/`):
 
 Template twin for other apps:
 [github-pages-flatpak-repo](https://github.com/sirredbeard/github-pages-flatpak-repo).
+
+
+### Actions secrets (GPG key material)
+
+Repo secrets on `sirredbeard/copilot-desktop-gtk` (names only via
+`gh secret list -R sirredbeard/copilot-desktop-gtk`):
+
+- `FLATPAK_GPG_PRIVATE_KEY` - armored private key; required by `release.yml`
+- `FLATPAK_GPG_PUBLIC_KEY` - armored public key (same body as
+  `packaging/flatpak-gpg/public.asc`)
+- `FLATPAK_GPG_KEY_ID` - short id (same as `packaging/flatpak-gpg/keyid.txt`)
+
+GitHub never returns secret values after set. Public key is also in git and
+on Pages (`flatpak-signing-key.asc`). Keep a private offline backup outside
+the repo; if the private key is gone, rotate (new key + commit public files +
+re-set secrets + new release). Detail:
+`packaging/flatpak-gpg/README.md`.
+
 
 Prebuilt AOT binary only. Install:
 
