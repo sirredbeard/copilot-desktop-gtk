@@ -8,11 +8,12 @@ Display name in GNOME is **Copilot**. This project is not affiliated with,
 sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks
 are trademarks of Microsoft.
 
-## Install
+## Install (updates)
 
-Recommended path installs from the project
-[GitHub Pages Flatpak repo](https://sirredbeard.github.io/copilot-desktop-gtk/)
-and keeps that remote for updates:
+Use the project
+[GitHub Pages Flatpak repo](https://sirredbeard.github.io/copilot-desktop-gtk/).
+That path adds the `copilot-desktop-gtk` remote so later releases arrive with
+`flatpak update` (and GNOME Software when that remote is configured).
 
 ```bash
 flatpak install --user flathub org.gnome.Platform//50
@@ -25,9 +26,10 @@ Later:
 
 ```bash
 flatpak update
+# or: GNOME Software → Updates
 ```
 
-Add the remote without installing:
+Remote only:
 
 ```bash
 flatpak remote-add --if-not-exists --user --no-gpg-verify \
@@ -37,13 +39,24 @@ flatpak install --user copilot-desktop-gtk \
   com.github.sirredbeard.copilot-desktop-gtk//stable
 ```
 
-Single-file `.flatpak` bundles and a bare AOT binary are attached to
-[GitHub Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases)
-for offline/sideload. Bundles do not register the Pages remote; prefer the
-`.flatpakref` when you want updates.
+After a `.flatpakref` or remote install, `flatpak info` should show
+`Origin: copilot-desktop-gtk` (not `sideload`).
 
-Repo landing page (human index):
-https://sirredbeard.github.io/copilot-desktop-gtk/
+Landing page: https://sirredbeard.github.io/copilot-desktop-gtk/
+
+## Offline artifacts on GitHub Releases
+
+[Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also
+attach:
+
+* A single-file `.flatpak` bundle (built with `--repo-url` pointing at the
+  Pages ostree, so install can still register the update remote)
+* A bare Native AOT binary (no Flatpak, no auto-updates)
+
+Prefer the `.flatpakref` above when you are online. Opening an old `.flatpak`
+in GNOME Software without a repo URL embedded shows **No Software Repository
+Included** and will not update. If you already sideloaded that way, add the
+remote (commands above) or reinstall from the `.flatpakref`.
 
 ## Build with Podman
 

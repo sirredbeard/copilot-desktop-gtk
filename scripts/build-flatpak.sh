@@ -104,7 +104,15 @@ flatpak_builder --force-clean --user --disable-rofiles-fuse \
 # Static deltas make Pages pulls practical (many small objects otherwise).
 flatpak build-update-repo --generate-static-deltas --prune "$REPO_DIR"
 
+# --repo-url embeds the ostree remote in the bundle so install (CLI or GNOME
+# Software) can register it for updates. Without this, sideload shows
+# "No Software Repository Included" and Origin stays sideload.
+PAGES_OWNER="${PAGES_OWNER:-sirredbeard}"
+PAGES_REPO="${PAGES_REPO:-copilot-desktop-gtk}"
+REPO_URL="${FLATPAK_REPO_URL:-https://${PAGES_OWNER}.github.io/${PAGES_REPO}/repo/}"
 flatpak build-bundle "$REPO_DIR" "$BUNDLE" "$APP_ID" "$BRANCH" \
+    --repo-url="$REPO_URL" \
     --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo
 echo "bundle: $BUNDLE ($(du -h "$BUNDLE" | awk '{print $1}'))"
 echo "repo:   $REPO_DIR"
+echo "repo-url (embedded): $REPO_URL"

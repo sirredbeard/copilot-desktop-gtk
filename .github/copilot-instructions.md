@@ -89,6 +89,9 @@ Release also stages `dist/pages-site` (ostree under `repo/`, `.flatpakrepo`,
 `actions/deploy-pages`. Landing URL:
 `https://sirredbeard.github.io/copilot-desktop-gtk/`. Primary install path is the
 `.flatpakref` so the Pages remote stays configured for `flatpak update`.
+Bundles are built with `flatpak build-bundle --repo-url=` pointing at the same
+Pages ostree so GNOME Software does not claim "No Software Repository Included"
+when that metadata is present. Still document `.flatpakref` as the default.
 Ostree repo is cached across runs (`flatpak-ostree-` cache key) for history/deltas.
 
 Release versioning: `next-version.sh` picks the next patch, `stamp-version.sh` writes it into
