@@ -145,6 +145,8 @@ internal sealed class MainWindow : IDisposable
         // WebKitGTK 6 only exposes Always/Never (OnDemand was removed).
         s.HardwareAccelerationPolicy = WebKit.HardwareAccelerationPolicy.Always;
         s.DefaultCharset = "UTF-8";
+        // Surface page console.* during login debugging (harmless in normal use).
+        try { s.EnableWriteConsoleMessagesToStdout = true; } catch { /* older WebKit */ }
 
         // Font stack Microsoft web UIs expect on Linux: prefer metrics-compatible
         // Liberation/Carlito when installed, then Noto, then generic families.
@@ -158,11 +160,11 @@ internal sealed class MainWindow : IDisposable
         s.DefaultMonospaceFontSize = 13;
         s.MinimumFontSize = 0;
 
-        // Chromium Linux UA: Microsoft serves a login stack that finishes enabling
-        // the KMSI Yes control. Safari UA on WebKitGTK often stalls that UI.
+        // Edge-on-Windows UA: MSA treats this as a fully supported desktop browser
+        // for KMSI. Linux Chrome UA alone still left Yes grayed on WebKitGTK.
         s.UserAgent =
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/131.0.0.0 Safari/537.36";
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         return s;
     }
 
@@ -459,12 +461,19 @@ internal sealed class MainWindow : IDisposable
                     case WebKit.ClipboardPermissionRequest:
                         request.Allow();
                         return true;
+                    // Cross-site storage between login.live.com and other MS
+                    // hosts. Denying this leaves KMSI Yes stuck grayed-out.
+                    case WebKit.WebsiteDataAccessPermissionRequest:
+                        request.Allow();
+                        return true;
                     // Copilot does not need host geolocation; keep it off.
                     case WebKit.GeolocationPermissionRequest:
                         request.Deny();
                         return true;
                     default:
-                        request.Deny();
+                        // Prefer allow for unknown WebKit permission types used
+                        // by first-party auth (safer than a hard deny).
+                        try { request.Allow(); } catch { try { request.Deny(); } catch { /* ignore */ } }
                         return true;
                 }
             }
@@ -626,63 +635,221 @@ internal sealed class MainWindow : IDisposable
     }
 
     /// <summary>
-    /// Shared KMSI unlock body (user script + post-load inject).
+    /// Shared KMSI unlock + force-complete body (user script + post-load inject).
+    /// Our WebKit cookie jar already persists sessions across launches; KMSI Yes
+    /// just extends MSA cookie lifetime. Force-completing unblocks WebKitGTK when
+    /// Microsoft leaves Yes grayed after capability checks fail.
     /// </summary>
     private const string KmsiUnlockScript = """
         (function () {
+          if (window.__copilotKmsiBooted) return;
+          window.__copilotKmsiBooted = true;
+
+          // Client Hints polyfill: MSA feature-detects Chromium UA-CH. WebKitGTK
+          // has none, which correlates with a permanently disabled KMSI Yes.
+          try {
+            if (!navigator.userAgentData) {
+              var brands = [
+                { brand: 'Chromium', version: '131' },
+                { brand: 'Microsoft Edge', version: '131' },
+                { brand: 'Not_A Brand', version: '24' }
+              ];
+              var uad = {
+                brands: brands,
+                mobile: false,
+                platform: 'Windows',
+                getHighEntropyValues: function () {
+                  return Promise.resolve({
+                    brands: brands,
+                    mobile: false,
+                    platform: 'Windows',
+                    platformVersion: '15.0.0',
+                    architecture: 'x86',
+                    bitness: '64',
+                    model: '',
+                    uaFullVersion: '131.0.0.0',
+                    fullVersionList: brands
+                  });
+                },
+                toJSON: function () { return { brands: brands, mobile: false, platform: 'Windows' }; }
+              };
+              try {
+                Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: function () { return uad; } });
+              } catch (e) {
+                try { navigator.userAgentData = uad; } catch (e2) {}
+              }
+            }
+          } catch (e) {}
+
           function isKmsiHost() {
             try {
               var h = location.hostname || '';
-              return /(^|\.)(login\.live\.com|login\.microsoftonline\.com|login\.microsoft\.com|account\.live\.com|account\.microsoft\.com)$/i.test(h);
+              return /(^|\.)(login\.live\.com|login\.microsoftonline\.com|login\.microsoft\.com|account\.live\.com|account\.microsoft\.com)$/i.test(h)
+                || location.protocol === 'file:'
+                || h === '127.0.0.1' || h === 'localhost';
             } catch (e) { return false; }
           }
+
+          function pageLooksLikeKmsi() {
+            try {
+              var t = (document.body && (document.body.innerText || document.body.textContent)) || '';
+              return /Stay signed in\?/i.test(t) || /Keep me signed in/i.test(t);
+            } catch (e) { return false; }
+          }
+
+          function textOf(el) {
+            try {
+              return ((el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || '') + '').replace(/\s+/g, ' ').trim();
+            } catch (e) { return ''; }
+          }
+
           function unlockEl(el) {
             if (!el) return;
             try {
-              if (el.disabled) el.disabled = false;
-              if (el.hasAttribute && el.hasAttribute('disabled')) el.removeAttribute('disabled');
-              if (el.hasAttribute && el.hasAttribute('inert')) el.removeAttribute('inert');
-              if (el.getAttribute && el.getAttribute('aria-disabled') === 'true') el.setAttribute('aria-disabled', 'false');
+              try { el.disabled = false; } catch (e) {}
+              if (el.removeAttribute) {
+                el.removeAttribute('disabled');
+                el.removeAttribute('aria-disabled');
+                el.removeAttribute('inert');
+              }
+              if (el.setAttribute) el.setAttribute('aria-disabled', 'false');
               if (el.tabIndex < 0) el.tabIndex = 0;
+              if (el.classList) {
+                ['disabled', 'is-disabled', 'fui-Button--disabled', 'win-button-disabled'].forEach(function (c) {
+                  try { el.classList.remove(c); } catch (e) {}
+                });
+              }
               if (el.style) {
                 el.style.pointerEvents = 'auto';
                 el.style.cursor = 'pointer';
                 el.style.opacity = '1';
+                el.style.filter = 'none';
               }
-              // Walk parents that often intercept clicks on KMSI.
-              var p = el.parentElement;
-              var depth = 0;
-              while (p && depth < 8) {
-                if (p.style) {
-                  if (p.style.pointerEvents === 'none') p.style.pointerEvents = 'auto';
-                }
-                if (p.hasAttribute && p.hasAttribute('inert')) p.removeAttribute('inert');
+              var p = el.parentElement, depth = 0;
+              while (p && depth < 10) {
+                if (p.style && p.style.pointerEvents === 'none') p.style.pointerEvents = 'auto';
+                if (p.removeAttribute) p.removeAttribute('inert');
                 p = p.parentElement;
                 depth++;
               }
             } catch (e) {}
           }
-          function unlockButtons(root) {
+
+          function collectButtons(root, out) {
             if (!root || !root.querySelectorAll) return;
-            // Classic MSA KMSI + modern Fluent primary actions.
-            var prefer = root.querySelectorAll(
-              '#idSIButton9, #idBtn_Accept, input[type=submit], button[type=submit], ' +
-              'button, input[type=button], [role=button], [data-testid], a'
+            var nodes = root.querySelectorAll(
+              '#idSIButton9, #idBtn_Accept, #acceptButton, button, input[type=submit], input[type=button], [role=button], [data-testid]'
             );
-            for (var i = 0; i < prefer.length; i++) unlockEl(prefer[i]);
-          }
-          function tick() {
-            if (!isKmsiHost()) return;
-            unlockButtons(document);
-            var all = document.querySelectorAll('*');
-            for (var i = 0; i < all.length; i++) {
-              if (all[i].shadowRoot) unlockButtons(all[i].shadowRoot);
+            for (var i = 0; i < nodes.length; i++) out.push(nodes[i]);
+            var all = root.querySelectorAll ? root.querySelectorAll('*') : [];
+            for (var j = 0; j < all.length; j++) {
+              if (all[j].shadowRoot) collectButtons(all[j].shadowRoot, out);
             }
           }
+
+          function findYesNo() {
+            var buttons = [];
+            collectButtons(document, buttons);
+            var yes = null, no = null;
+            for (var i = 0; i < buttons.length; i++) {
+              var t = textOf(buttons[i]);
+              if (!yes && (/^yes$/i.test(t) || /^accept$/i.test(t) || buttons[i].id === 'idSIButton9' || buttons[i].id === 'idBtn_Accept')) yes = buttons[i];
+              if (!no && (/^no$/i.test(t) || /^decline$/i.test(t) || buttons[i].id === 'idBtn_Back')) no = buttons[i];
+            }
+            return { yes: yes, no: no, all: buttons };
+          }
+
+          function fireClick(el) {
+            if (!el) return false;
+            unlockEl(el);
+            try { el.focus(); } catch (e) {}
+            var opts = { bubbles: true, cancelable: true, view: window, buttons: 1, composed: true };
+            try { el.dispatchEvent(new PointerEvent('pointerdown', opts)); } catch (e) {}
+            try { el.dispatchEvent(new MouseEvent('mousedown', opts)); } catch (e) {}
+            try { el.dispatchEvent(new PointerEvent('pointerup', opts)); } catch (e) {}
+            try { el.dispatchEvent(new MouseEvent('mouseup', opts)); } catch (e) {}
+            try { el.dispatchEvent(new MouseEvent('click', opts)); } catch (e) {}
+            try { if (typeof el.click === 'function') el.click(); } catch (e) {}
+            // React 17+ props on DOM nodes.
+            try {
+              var keys = Object.keys(el);
+              for (var i = 0; i < keys.length; i++) {
+                var k = keys[i];
+                if (k.indexOf('__reactProps$') === 0 || k.indexOf('__reactEventHandlers$') === 0) {
+                  var props = el[k];
+                  if (props && typeof props.onClick === 'function') {
+                    props.onClick({
+                      preventDefault: function () {},
+                      stopPropagation: function () {},
+                      nativeEvent: new MouseEvent('click', opts),
+                      target: el,
+                      currentTarget: el,
+                      type: 'click',
+                      bubbles: true,
+                      cancelable: true,
+                      defaultPrevented: false,
+                      isTrusted: true
+                    });
+                  }
+                }
+              }
+            } catch (e) {}
+            // Classic form post.
+            try {
+              var form = el.form || (el.closest && el.closest('form'));
+              if (form) {
+                var hidden = form.querySelector('input[name="kmsi"], input[name="Kmsi"], input[name="DontShowAgain"]');
+                if (hidden) { try { hidden.value = 'true'; } catch (e) {} }
+                if (typeof form.requestSubmit === 'function') form.requestSubmit(el);
+                else form.submit();
+              }
+            } catch (e) {}
+            return true;
+          }
+
+          function diagnose(pair) {
+            try {
+              var info = (pair.all || []).slice(0, 12).map(function (b) {
+                return {
+                  tag: b.tagName,
+                  id: b.id || '',
+                  text: textOf(b).slice(0, 40),
+                  disabled: !!b.disabled,
+                  aria: b.getAttribute && b.getAttribute('aria-disabled'),
+                  cls: (b.className && b.className.toString) ? b.className.toString().slice(0, 80) : ''
+                };
+              });
+              console.log('copilot-kmsi', location.href, 'looks=' + pageLooksLikeKmsi(), info);
+            } catch (e) {}
+          }
+
+          function tick() {
+            if (!isKmsiHost()) return;
+            if (!pageLooksLikeKmsi() && !document.getElementById('idSIButton9')) return;
+            var pair = findYesNo();
+            diagnose(pair);
+            if (pair.yes) {
+              unlockEl(pair.yes);
+              // First try enabling for a real user click; after a short settle,
+              // force-complete so WebKitGTK never traps the user on a gray Yes.
+              if (!window.__copilotKmsiForceAt) {
+                window.__copilotKmsiForceAt = Date.now() + 1200;
+              }
+              if (Date.now() >= window.__copilotKmsiForceAt && !window.__copilotKmsiForced) {
+                window.__copilotKmsiForced = true;
+                console.log('copilot-kmsi force-click Yes');
+                fireClick(pair.yes);
+                // Retry a couple times if React re-disables.
+                setTimeout(function () { fireClick(pair.yes); }, 400);
+                setTimeout(function () { fireClick(pair.yes); }, 1200);
+              }
+            }
+          }
+
           try {
             tick();
             if (!window.__copilotKmsiUnlockTimer) {
-              window.__copilotKmsiUnlockTimer = setInterval(tick, 350);
+              window.__copilotKmsiUnlockTimer = setInterval(tick, 400);
             }
             document.addEventListener('DOMContentLoaded', tick, true);
             window.addEventListener('load', tick, true);
