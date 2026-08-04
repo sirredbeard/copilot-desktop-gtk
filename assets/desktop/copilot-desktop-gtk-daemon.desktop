@@ -12,3 +12,4 @@ Keywords=AI;Copilot;GPT;ChatGPT;Microsoft;
 StartupNotify=false
 NoDisplay=true
 MimeType=x-scheme-handler/copilotdesktop;
+X-AppStream-Ignore=true

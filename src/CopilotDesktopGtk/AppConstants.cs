@@ -30,6 +30,8 @@ internal static class AppConstants
         "auth.copilot.microsoft.com",
         "copilot.com",
         "www.copilot.com",
+        "copilot.fun",
+        "www.copilot.fun",
         // Microsoft first-party auth
         "login.microsoftonline.com",
         "login.live.com",
@@ -100,7 +102,9 @@ internal static class AppConstants
             host.EndsWith(".copilot.cloud.microsoft", StringComparison.OrdinalIgnoreCase) ||
             host.EndsWith(".cloud.microsoft", StringComparison.OrdinalIgnoreCase) ||
             host.Equals("copilot.com", StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith(".copilot.com", StringComparison.OrdinalIgnoreCase))
+            host.EndsWith(".copilot.com", StringComparison.OrdinalIgnoreCase) ||
+            host.Equals("copilot.fun", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".copilot.fun", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

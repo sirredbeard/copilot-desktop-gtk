@@ -1,0 +1,45 @@
+Copilot Desktop - notices
+========================
+
+Trademark
+---------
+This project is not affiliated with, sponsored, or endorsed by Microsoft
+Corporation. Microsoft, Copilot, Windows, Azure, and related marks are
+trademarks of Microsoft Corporation. All other trademarks are property of
+their respective owners.
+
+Third-party components
+----------------------
+This application links against or embeds the following third-party software.
+Their licenses apply to those components:
+
+1. .NET runtime libraries (Microsoft .NET)
+   Copyright (c) .NET Foundation and Contributors
+   License: MIT - https://github.com/dotnet/runtime/blob/main/LICENSE.TXT
+   Used via .NET 11 Native AOT publish (self-contained native binary).
+
+2. GirCore (GTK / WebKit / Adwaita C# bindings)
+   Copyright (c) GirCore contributors
+   License: MIT - https://github.com/gircore/gir.core/blob/main/LICENSE
+   NuGet: GirCore.Gtk-4.0, GirCore.WebKit-6.0, GirCore.Adw-1
+
+3. GTK 4, GLib, GObject, Gio (GNOME Project)
+   License: LGPL-2.1-or-later
+   https://gitlab.gnome.org/GNOME/gtk
+
+4. libadwaita (GNOME Project)
+   License: LGPL-2.1-or-later
+   https://gitlab.gnome.org/GNOME/libadwaita
+
+5. WebKitGTK (Apple Inc., Igalia, and contributors)
+   License: LGPL-2.1-or-later and BSD-style terms
+   https://webkitgtk.org/
+
+6. GStreamer and plugins (GStreamer community)
+   License: LGPL-2.1-or-later
+   Used at runtime by WebKit for media capture/playback (PipeWire/Pulse).
+
+Runtime shared libraries (GTK, WebKitGTK, GStreamer) are not redistributed
+inside the Native AOT binary package; they are system or Flatpak runtime
+dependencies. The Flatpak bundle depends on org.gnome.Platform for those
+libraries.

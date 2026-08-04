@@ -344,9 +344,9 @@ internal sealed class MainWindow : IDisposable
                     return _webView;
                 }
 
-                // True external: open outside, do not create a second WebView.
-                Console.WriteLine($"external link (create): {uri}");
-                ExternalBrowser.Open(uri);
+                // True external: stay in-app. Never hand URIs to the host browser
+                // (launch spam like copilot.fun). Drop the popup.
+                Console.WriteLine($"blocked external (create): {uri}");
                 return null!;
             }
             catch (Exception ex)
@@ -659,9 +659,11 @@ internal sealed class MainWindow : IDisposable
             return;
         }
 
-        Console.WriteLine($"external link: {uri}");
+        // Block external navigations quietly. Do not xdg-open / UriLauncher -
+        // Copilot's marketing hops (e.g. copilot.fun) were opening a second
+        // browser window on every launch.
+        Console.WriteLine($"blocked external: {uri}");
         decision.Ignore();
-        ExternalBrowser.Open(uri);
     }
 
     private static bool IsInternalUri(string uri)
@@ -865,33 +867,5 @@ internal sealed class MainWindow : IDisposable
                || m.Contains("tls", StringComparison.Ordinal)
                || m.Contains("ssl", StringComparison.Ordinal)
                || m.Contains("host not found", StringComparison.Ordinal);
-    }
-}
-
-internal static class ExternalBrowser
-{
-    public static void Open(string url)
-    {
-        if (!AppConstants.IsHttpUrl(url, out _))
-        {
-            return;
-        }
-
-        try
-        {
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "xdg-open",
-                ArgumentList = { url },
-                UseShellExecute = false,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-            };
-            System.Diagnostics.Process.Start(psi)?.Dispose();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"xdg-open failed: {ex.Message}");
-        }
     }
 }

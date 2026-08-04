@@ -3,14 +3,18 @@
 #
 # Purpose: Build a Flatpak and a single-file .flatpak bundle from the
 #   prebuilt Native AOT binary.
-# Usage:   ./scripts/build-flatpak.sh [version]
+# Usage:   ./scripts/build-flatpak.sh [version]  # default: version from csproj
 # Needs:   flatpak, flatpak-builder, org.gnome.Sdk//50, dist/publish binary
 # CI:      Yes.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-0.1.0}"
+if [[ "${1:-}" != "" ]]; then
+    VERSION="$1"
+else
+    VERSION="$("${ROOT}/scripts/resolve-app-version.sh")"
+fi
 APP_ID="com.github.sirredbeard.copilot-desktop-gtk"
 MANIFEST="${ROOT}/packaging/flatpak/${APP_ID}.yml"
 BUILD_DIR="${ROOT}/dist/flatpak-build"

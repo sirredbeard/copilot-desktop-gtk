@@ -59,11 +59,14 @@ modules:
     build-commands:
       - install -Dm755 copilot-desktop-gtk /app/bin/copilot-desktop-gtk
       - install -Dm644 copilot-desktop-gtk.desktop /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
-      - install -Dm644 copilot-desktop-gtk-daemon.desktop /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk-daemon.desktop
+      # Daemon desktop stays private (not exported) so GNOME Software only sees one launchable.
+      - install -Dm644 copilot-desktop-gtk-daemon.desktop /app/share/copilot-desktop-gtk/copilot-desktop-gtk-daemon.desktop
       - install -Dm644 copilot-desktop-gtk-autostart.desktop /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
       - install -Dm644 com.github.sirredbeard.copilot-desktop-gtk.metainfo.xml /app/share/metainfo/com.github.sirredbeard.copilot-desktop-gtk.metainfo.xml
-      - install -Dm644 LICENSE /app/share/licenses/copilot-desktop-gtk/LICENSE
-      - install -Dm644 LICENSE /app/share/doc/copilot-desktop-gtk/LICENSE
+      # AppStream / Software look for licenses under the app-id path.
+      - install -Dm644 LICENSE /app/share/licenses/com.github.sirredbeard.copilot-desktop-gtk/LICENSE
+      - install -Dm644 NOTICE /app/share/doc/com.github.sirredbeard.copilot-desktop-gtk/NOTICE
+      - install -Dm644 LICENSE /app/share/doc/com.github.sirredbeard.copilot-desktop-gtk/LICENSE
       - install -Dm644 icons/hicolor/512x512/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/512x512/apps/com.github.sirredbeard.copilot-desktop-gtk.png
       - install -Dm644 icons/hicolor/256x256/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/256x256/apps/com.github.sirredbeard.copilot-desktop-gtk.png
       - install -Dm644 icons/hicolor/128x128/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/128x128/apps/com.github.sirredbeard.copilot-desktop-gtk.png
@@ -73,8 +76,8 @@ modules:
       - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
       - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk %U' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
       - desktop-file-edit --set-key=Name --set-value='Copilot Desktop' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
-      - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk-daemon.desktop
-      - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk --daemon' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk-daemon.desktop
+      - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/share/copilot-desktop-gtk/copilot-desktop-gtk-daemon.desktop
+      - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk --daemon' /app/share/copilot-desktop-gtk/copilot-desktop-gtk-daemon.desktop
       - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
       - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk' /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
       - desktop-file-edit --set-key=Name --set-value='Copilot Desktop' /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
@@ -91,6 +94,8 @@ modules:
         path: ../../assets/metainfo/com.github.sirredbeard.copilot-desktop-gtk.metainfo.xml
       - type: file
         path: ../../LICENSE
+      - type: file
+        path: ../../NOTICE
       - type: dir
         path: ../../dist/icons
         dest: icons

@@ -59,7 +59,8 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 
 ## Scripts
 
-- `next-version.sh` - next patch from latest GitHub release tag (starts at 0.1.0)
+- `resolve-app-version.sh` - read X.Y.Z from csproj / AppConstants (no hard-coded product version in scripts)
+- `next-version.sh` - next patch from latest GitHub release tag; first release uses project version
 - `stamp-version.py` / `stamp-version.sh` - write version into AppConstants/csproj/metainfo for release builds
 
 - `seed-flatpak-runtimes.sh` - install GNOME 50 Platform/Sdk/GL/codecs into FLATPAK_USER_DIR

@@ -3,6 +3,7 @@
 #
 # Purpose: Pull or build the builder image, then compile and package inside it.
 # Usage:   ./scripts/podman-build-local.sh [--pull-ghcr] [version]
+#   version defaults to csproj / AppConstants via resolve-app-version.sh
 # Needs:   podman
 # CI:      No (local developer path).
 
@@ -10,7 +11,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PULL=0
-VERSION="0.1.0"
+VERSION=""
 LOCAL_TAG="localhost/copilot-desktop-gtk-builder:latest"
 GHCR_TAG="ghcr.io/sirredbeard/copilot-desktop-gtk-builder:latest"
 
@@ -20,6 +21,10 @@ for arg in "$@"; do
         *) VERSION="$arg" ;;
     esac
 done
+
+if [[ -z "$VERSION" ]]; then
+    VERSION="$("${ROOT}/scripts/resolve-app-version.sh")"
+fi
 
 IMAGE="$LOCAL_TAG"
 if [[ "$PULL" -eq 1 ]]; then

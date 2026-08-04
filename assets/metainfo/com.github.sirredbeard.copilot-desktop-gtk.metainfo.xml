@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   AppStream metainfo for GNOME Software / appstreamcli.
-  Keep name as "Copilot Desktop". project_license is SPDX.
+  Name stays "Copilot Desktop". project_license is SPDX MIT.
+  Id must match app-id and the single exported .desktop launchable.
 -->
 <component type="desktop-application">
   <id>com.github.sirredbeard.copilot-desktop-gtk</id>
-  <name>Copilot Desktop</name>
-  <summary>Unofficial desktop app for Microsoft Copilot</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
+  <name>Copilot Desktop</name>
+  <summary>Unofficial desktop app for Microsoft Copilot</summary>
   <developer id="com.github.sirredbeard">
     <name>Hayden Barnes</name>
   </developer>
@@ -25,15 +26,16 @@
     </p>
   </description>
   <launchable type="desktop-id">com.github.sirredbeard.copilot-desktop-gtk.desktop</launchable>
-  <icon type="stock">com.github.sirredbeard.copilot-desktop-gtk</icon>
   <url type="homepage">https://github.com/sirredbeard/copilot-desktop-gtk</url>
   <url type="bugtracker">https://github.com/sirredbeard/copilot-desktop-gtk/issues</url>
   <url type="vcs-browser">https://github.com/sirredbeard/copilot-desktop-gtk</url>
-  <url type="contribute">https://github.com/sirredbeard/copilot-desktop-gtk</url>
+  <url type="contribute">https://github.com/sirredbeard/copilot-desktop-gtk#readme</url>
+  <url type="help">https://github.com/sirredbeard/copilot-desktop-gtk#readme</url>
+  <url type="contact">https://github.com/sirredbeard</url>
   <project_group>GitHub</project_group>
   <provides>
     <binary>copilot-desktop-gtk</binary>
-    <id>com.github.sirredbeard.copilot-desktop-gtk.desktop</id>
+    <mediatype>x-scheme-handler/copilotdesktop</mediatype>
   </provides>
   <supports>
     <control>pointing</control>
@@ -42,15 +44,19 @@
   </supports>
   <requires>
     <display_length compare="ge">360</display_length>
+    <internet>always</internet>
   </requires>
+  <recommends>
+    <control>console</control>
+  </recommends>
   <categories>
     <category>Network</category>
     <category>Office</category>
     <category>Utility</category>
   </categories>
   <keywords>
-    <keyword>Copilot</keyword>
-    <keyword>Microsoft</keyword>
+    <keyword translate="no">Copilot</keyword>
+    <keyword translate="no">Microsoft</keyword>
     <keyword>AI</keyword>
     <keyword>chat</keyword>
     <keyword>assistant</keyword>
