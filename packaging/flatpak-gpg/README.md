@@ -41,8 +41,8 @@ signatures found" even when HTTP `.commitmeta` exists.
 
 ## Files
 
-- `public.asc` — public key (committed)
-- `keyid.txt` — short key id (committed)
+- `public.asc`  -  public key (committed)
+- `keyid.txt`  -  short key id (committed)
 - Private key is **not** in git. CI uses secret `FLATPAK_GPG_PRIVATE_KEY`
   (armored private key body). Local builds use
   `FLATPAK_GPG_HOME` or import the same armored key into a temp homedir.

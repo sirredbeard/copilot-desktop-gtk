@@ -16,8 +16,15 @@ flatpak install --user --from \
 flatpak run com.github.sirredbeard.copilot-desktop-gtk
 ```
 
-The `.flatpakref` adds the project remote for updates and pulls the GNOME
-runtime from Flathub when needed.
+The `.flatpakref` adds the project remote for updates, embeds the Pages
+signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when
+needed.
+
+System installs (for example a desktop image that puts the app under
+`/var/lib/flatpak`) need that GPG path so non-root `flatpak update` and
+GNOME Software can pull without root. Polkit still has to allow Deploy in
+an active local session; GPG is the trust check, not a substitute for
+polkit.
 
 ## Offline artifacts on GitHub Releases
 
@@ -25,6 +32,10 @@ runtime from Flathub when needed.
 
 * A single-file `.flatpak` bundle for side-loading
 * A bare Native AOT binary
+
+Prefer the `.flatpakref` when you want `flatpak update` from Pages. Bundles
+are built with `flatpak build-bundle --repo-url=` pointing at the same
+Pages ostree when possible.
 
 ## Build with Podman
 
@@ -38,13 +49,18 @@ Uses the project builder image (Azure Linux 4 + .NET 11 + Flatpak tooling).
 ./scripts/podman-build-local.sh
 ```
 
-Artifacts land under `dist/publish/` and `dist/flatpak/`. 
+Artifacts land under `dist/publish/` and `dist/flatpak/`.
 
 After a local Flatpak build you can stage a Pages-shaped tree with:
 
 ```bash
 ./scripts/stage-flatpak-pages.sh
 ```
+
+GPG signing for a local Pages tree: set `FLATPAK_GPG_PRIVATE_KEY` or
+`FLATPAK_GPG_HOME`, run `./scripts/build-flatpak.sh` (signs every OSTree tip
+before static deltas), then stage. See
+[packaging/flatpak-gpg/README.md](packaging/flatpak-gpg/README.md).
 
 ## Build without Podman
 

@@ -49,6 +49,32 @@ Release runs **inside** that image with `--privileged` so bwrap works.
 
 ## Flatpak packaging
 
+### GPG signing (Pages OSTree)
+
+System HTTPS remotes need GPG for non-root updates and GNOME Software.
+Polkit can authorize Deploy; it cannot replace Flatpak trust for unsigned
+remotes (`Can't pull from untrusted non-gpg verified remote`).
+
+Contract (`scripts/build-flatpak.sh` + `packaging/flatpak-gpg/`):
+
+1. Import key (`FLATPAK_GPG_PRIVATE_KEY` in CI, or local GPG home).
+2. Refresh appstream **without** static deltas.
+3. `ostree gpg-sign` **every** ref tip: `app/*`, `appstream2/x86_64`,
+   `appstream/x86_64`, `screenshots/x86_64`. `flatpak build-sign` alone is
+   not enough for Software (it signs app commits only).
+4. **Then** `flatpak build-update-repo --generate-static-deltas`. Deltas
+   built before signatures make default pulls report "no signatures found"
+   even when HTTPS serves `.commitmeta` (delta path skips detached
+   commitmeta). Object-only pulls with `--disable-static-deltas` hide this.
+5. CI must prove a **default** (delta) pull of app + appstream2 before
+   Pages deploy (`verify-pages-install` / local ostree pull without
+   disabling deltas).
+6. `stage-flatpak-pages.sh` embeds `GPGKey=` and ships
+   `flatpak-signing-key.asc`.
+
+Template twin for other apps:
+[github-pages-flatpak-repo](https://github.com/sirredbeard/github-pages-flatpak-repo).
+
 Prebuilt AOT binary only. Install:
 
 - binary, `.desktop` files, icons under the app-id name
@@ -64,7 +90,9 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 - `stamp-version.py` / `stamp-version.sh` - write version into AppConstants/csproj/metainfo for release builds
 - `verify-flatpak-version.sh` - install bundle in temp FLATPAK_USER_DIR and assert Version/License
 - `verify-flatpak-repo-install.sh` - post-Pages: install via remote/flatpakref (no bundle), assert origin + update path
-- `stage-flatpak-pages.sh` - assemble Pages site from ostree repo + flatpakref/repo files
+- `stage-flatpak-pages.sh` - assemble Pages site from ostree repo + flatpakref/repo files (`GPGKey=` when public.asc present)
+- `flatpak-gpg-import.sh` - import or generate signing key homedir
+- GPG contract: `packaging/flatpak-gpg/README.md` (sign all tips, then deltas)
 - `generate-flatpak-repo-index.sh` - index.html + .nojekyll for Pages (no Jekyll, no bare dir 404s)
 
 - `seed-flatpak-runtimes.sh` - install GNOME 50 Platform/Sdk/GL/codecs into FLATPAK_USER_DIR
@@ -74,7 +102,7 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 - `podman-build-local.sh` - build/package/lint/smoke inside builder
 - `build-app.sh` - Native AOT publish
 - `build-icons.sh` - icon sizes from logo asset
-- `build-flatpak.sh` - manifest → ostree repo (stable branch, static deltas) → single-file bundle
+- `build-flatpak.sh` - manifest → ostree repo (stable branch); GPG-sign every tip; **then** static deltas; bundle
 - `test-smoke.sh` - headless smoke of the AOT binary
 
 ## Workflows
@@ -111,3 +139,6 @@ AppConstants/csproj/metainfo, `build-flatpak.sh` stamps again before bundle expo
 - Do not wipe WebKit data between launches.
 - Do not open the system browser for first-party Copilot/Microsoft hosts or for `NewWindowAction` on those hosts.
 - Do not co-author commits or add tool signatures to git history.
+- Do not generate static deltas before GPG-signing every OSTree tip (including appstream2).
+- Do not treat `flatpak build-sign` alone or object-only ostree pulls as proof of a signed remote.
+- Do not ship an unsigned Pages remote for system installs that GNOME Software should update.
