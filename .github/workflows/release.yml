@@ -75,10 +75,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
           V="${{ steps.ver.outputs.version }}"
           TAG="${{ steps.ver.outputs.tag }}"
-          git config user.name "sirredbeard"
-          git config user.email "sirredbeard@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release $TAG"
-          git push origin "$TAG"
-          gh release create "$TAG"             --title "$TAG"             --generate-notes             dist/publish/copilot-desktop-gtk             "dist/flatpak/com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak"
+          test -f dist/publish/copilot-desktop-gtk
+          test -f "dist/flatpak/com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak"
+          # Tag + release via API so container job does not need a writable local git.
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "$TAG" \
+            --generate-notes \
+            dist/publish/copilot-desktop-gtk \
+            "dist/flatpak/com.github.sirredbeard.copilot-desktop-gtk-${V}.flatpak"
