@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Copilot Desktop
+GenericName=Microsoft Copilot
+Comment=Copilot Desktop helper
+Exec=copilot-desktop-gtk --daemon
+Icon=copilot-desktop-gtk
+Terminal=false
+Categories=Network;GNOME;GTK;
+Keywords=AI;Copilot;GPT;ChatGPT;Microsoft;
+StartupNotify=false
+NoDisplay=true
+MimeType=x-scheme-handler/copilotdesktop;

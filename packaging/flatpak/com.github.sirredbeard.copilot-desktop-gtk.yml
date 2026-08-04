@@ -1,0 +1,96 @@
+# Flatpak manifest for copilot-desktop-gtk
+# Runtime: GNOME platform. Binary is prebuilt Native AOT; the module only
+# installs files (no in-flatpak compile). GNOME-first: no tray library bundle.
+app-id: com.github.sirredbeard.copilot-desktop-gtk
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: copilot-desktop-gtk
+finish-args:
+  # Display
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Camera (V4L2) + PipeWire camera nodes for WebRTC / vision
+  - --device=all
+  # Audio in/out (PipeWire / Pulse)
+  - --socket=pulseaudio
+  - --filesystem=xdg-run/pipewire-0
+  # Network for Copilot + auth
+  - --share=network
+  # File uploads / downloads; portal FileChooser covers the rest
+  - --filesystem=xdg-download:rw
+  - --filesystem=xdg-documents:ro
+  - --filesystem=xdg-pictures:ro
+  - --filesystem=xdg-videos:ro
+  - --filesystem=xdg-music:ro
+  - --filesystem=xdg-desktop:ro
+  # Host fonts so Microsoft web UI metrics look right
+  - --filesystem=xdg-data/fonts:ro
+  - --filesystem=xdg-config/fontconfig:ro
+  - --filesystem=/usr/share/fonts:ro
+  - --filesystem=/usr/local/share/fonts:ro
+  - --filesystem=~/.fonts:ro
+  # Print (CUPS + portal)
+  - --socket=cups
+  - --talk-name=org.freedesktop.portal.Print
+  # User autostart toggle writes here
+  - --filesystem=xdg-config/autostart:create
+  # Notifications, secrets, portals
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.portal.Documents
+  - --talk-name=org.freedesktop.portal.FileChooser
+  - --talk-name=org.freedesktop.portal.OpenURI
+  - --talk-name=org.freedesktop.portal.Settings
+  - --talk-name=org.freedesktop.portal.Background
+  - --talk-name=org.freedesktop.portal.Camera
+  - --own-name=com.github.sirredbeard.copilot-desktop-gtk
+  # Optional SNI watcher probe only (no tray library shipped)
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.DBus
+  # Persistent WebKit cookies / localStorage / IndexedDB
+  - --persist=.local/share/copilot-desktop-gtk
+modules:
+  - name: copilot-desktop-gtk
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 copilot-desktop-gtk /app/bin/copilot-desktop-gtk
+      - install -Dm644 copilot-desktop-gtk.desktop /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - install -Dm644 copilot-desktop-gtk-daemon.desktop /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk-daemon.desktop
+      - install -Dm644 copilot-desktop-gtk-autostart.desktop /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - install -Dm644 com.github.sirredbeard.copilot-desktop-gtk.metainfo.xml /app/share/metainfo/com.github.sirredbeard.copilot-desktop-gtk.metainfo.xml
+      - install -Dm644 LICENSE /app/share/licenses/copilot-desktop-gtk/LICENSE
+      - install -Dm644 LICENSE /app/share/doc/copilot-desktop-gtk/LICENSE
+      - install -Dm644 icons/hicolor/512x512/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/512x512/apps/com.github.sirredbeard.copilot-desktop-gtk.png
+      - install -Dm644 icons/hicolor/256x256/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/256x256/apps/com.github.sirredbeard.copilot-desktop-gtk.png
+      - install -Dm644 icons/hicolor/128x128/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/128x128/apps/com.github.sirredbeard.copilot-desktop-gtk.png
+      - install -Dm644 icons/hicolor/64x64/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/64x64/apps/com.github.sirredbeard.copilot-desktop-gtk.png
+      - install -Dm644 icons/hicolor/48x48/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/48x48/apps/com.github.sirredbeard.copilot-desktop-gtk.png
+      - install -Dm644 icons/hicolor/32x32/apps/copilot-desktop-gtk.png /app/share/icons/hicolor/32x32/apps/com.github.sirredbeard.copilot-desktop-gtk.png
+      - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk %U' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - desktop-file-edit --set-key=Name --set-value='Copilot Desktop' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk-daemon.desktop
+      - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk --daemon' /app/share/applications/com.github.sirredbeard.copilot-desktop-gtk-daemon.desktop
+      - desktop-file-edit --set-key=Icon --set-value=com.github.sirredbeard.copilot-desktop-gtk /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - desktop-file-edit --set-key=Exec --set-value='copilot-desktop-gtk' /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
+      - desktop-file-edit --set-key=Name --set-value='Copilot Desktop' /app/etc/xdg/autostart/com.github.sirredbeard.copilot-desktop-gtk.desktop
+    sources:
+      - type: file
+        path: ../../dist/publish/copilot-desktop-gtk
+      - type: file
+        path: ../../assets/desktop/copilot-desktop-gtk.desktop
+      - type: file
+        path: ../../assets/desktop/copilot-desktop-gtk-daemon.desktop
+      - type: file
+        path: ../../assets/desktop/copilot-desktop-gtk-autostart.desktop
+      - type: file
+        path: ../../assets/metainfo/com.github.sirredbeard.copilot-desktop-gtk.metainfo.xml
+      - type: file
+        path: ../../LICENSE
+      - type: dir
+        path: ../../dist/icons
+        dest: icons

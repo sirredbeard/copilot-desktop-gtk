@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Copilot Desktop
+GenericName=Microsoft Copilot
+Comment=Start Copilot Desktop with the session
+Exec=copilot-desktop-gtk
+Icon=copilot-desktop-gtk
+Terminal=false
+Categories=Network;GNOME;GTK;
+Keywords=AI;Copilot;GPT;ChatGPT;Microsoft;
+StartupNotify=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3

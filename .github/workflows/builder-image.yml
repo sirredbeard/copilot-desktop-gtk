@@ -1,0 +1,141 @@
+# Build and push the copilot-desktop-gtk-builder image to GHCR.
+# Local testing uses podman (scripts/build-builder-image.sh).
+#
+# Image tags: latest + YYYY.MM.DD (UTC build date). No sha/dotnet/commit tags.
+name: builder-image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "container/**"
+      - "scripts/resolve-dotnet-sdk.sh"
+      - "scripts/build-builder-image.sh"
+      - "scripts/seed-flatpak-runtimes.sh"
+      - ".github/workflows/builder-image.yml"
+  pull_request:
+    paths:
+      - "container/**"
+      - "scripts/resolve-dotnet-sdk.sh"
+      - "scripts/build-builder-image.sh"
+      - "scripts/seed-flatpak-runtimes.sh"
+      - ".github/workflows/builder-image.yml"
+  workflow_dispatch:
+  schedule:
+    # Pick up new .NET 11 preview SDKs and Flatpak runtimes weekly.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: copilot-desktop-gtk-builder
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve .NET 11 SDK
+        id: dotnet
+        run: |
+          set -euo pipefail
+          ./scripts/resolve-dotnet-sdk.sh "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+      - name: Image version (YYYY.MM.DD UTC)
+        id: ver
+        run: |
+          set -euo pipefail
+          DATE_TAG="$(date -u +%Y.%m.%d)"
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+          {
+            echo "date_tag=${DATE_TAG}"
+            echo "image=${IMAGE}"
+            echo "tag_latest=${IMAGE}:latest"
+            echo "tag_date=${IMAGE}:${DATE_TAG}"
+          } >> "$GITHUB_OUTPUT"
+          echo "builder tags: latest ${DATE_TAG}"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+          df -h
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Dockerfile installs tooling + flathub remote only. GNOME 50 runtimes are
+      # seeded in a privileged container after build (build-push-action has no
+      # privileged input; actionlint rejects inventing one).
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: container/Dockerfile
+          load: true
+          tags: localhost/copilot-desktop-gtk-builder:seed
+          labels: |
+            org.opencontainers.image.title=copilot-desktop-gtk-builder
+            org.opencontainers.image.description=Azure Linux 4 + .NET 11 + Flatpak builder
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.ver.outputs.date_tag }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            DOTNET_SDK_VERSION=${{ steps.dotnet.outputs.DOTNET_SDK_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Seed Flatpak GNOME 50 runtimes
+        run: |
+          set -euo pipefail
+          docker rm -f copilot-builder-seed >/dev/null 2>&1 || true
+          docker create --name copilot-builder-seed --privileged \
+            localhost/copilot-desktop-gtk-builder:seed sleep infinity
+          docker start copilot-builder-seed
+          docker cp scripts/seed-flatpak-runtimes.sh copilot-builder-seed:/tmp/seed-flatpak-runtimes.sh
+          docker exec -e FLATPAK_USER_DIR=/var/lib/flatpak-builder-user \
+            copilot-builder-seed bash /tmp/seed-flatpak-runtimes.sh
+          docker commit copilot-builder-seed "${{ steps.ver.outputs.tag_latest }}"
+          docker tag "${{ steps.ver.outputs.tag_latest }}" "${{ steps.ver.outputs.tag_date }}"
+          docker rm -f copilot-builder-seed
+          docker images | head -20
+
+      - name: Push image
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          docker push "${{ steps.ver.outputs.tag_latest }}"
+          docker push "${{ steps.ver.outputs.tag_date }}"
+
+      - name: Prune legacy GHCR tags
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PKG: ${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          # Keep only latest and YYYY.MM.DD. Delete sha-/dotnet-/other legacy versions.
+          versions="$(gh api "users/${OWNER}/packages/container/${PKG}/versions" --paginate 2>/dev/null || true)"
+          if [ -z "${versions}" ] || [ "${versions}" = "[]" ]; then
+            versions="$(gh api "orgs/${OWNER}/packages/container/${PKG}/versions" --paginate 2>/dev/null || true)"
+          fi
+          if [ -z "${versions}" ] || [ "${versions}" = "null" ]; then
+            echo "no package versions listed; skip prune"
+            exit 0
+          fi
+          echo "${versions}" > /tmp/pkg-versions.json
+          python3 scripts/prune-builder-tags.py /tmp/pkg-versions.json

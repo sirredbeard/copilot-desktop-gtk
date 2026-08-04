@@ -1,0 +1,72 @@
+# Tag or manual release: AOT + Flatpak inside the AZL4 builder image, publish to GitHub Releases.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without v prefix (e.g. 0.1.0)"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: write
+  packages: read
+
+env:
+  BUILDER: ghcr.io/sirredbeard/copilot-desktop-gtk-builder:latest
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/sirredbeard/copilot-desktop-gtk-builder:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+
+      - name: NuGet package cache
+        uses: actions/cache@v4
+        with:
+          path: /root/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Build AOT + Flatpak
+        run: |
+          set -euo pipefail
+          # Builder image seeds GNOME 50 + GL/codecs; build-flatpak skips re-download.
+          ./scripts/build-app.sh Release
+          ./scripts/build-icons.sh
+          ./scripts/test-smoke.sh
+          ./scripts/build-flatpak.sh "${{ steps.ver.outputs.version }}"
+          ls -lah dist/publish/ dist/flatpak/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            dist/publish/copilot-desktop-gtk
+            dist/flatpak/*.flatpak

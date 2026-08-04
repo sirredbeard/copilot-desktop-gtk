@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream metainfo for GNOME Software / appstreamcli.
+  Keep name as "Copilot Desktop". project_license is SPDX.
+-->
+<component type="desktop-application">
+  <id>com.github.sirredbeard.copilot-desktop-gtk</id>
+  <name>Copilot Desktop</name>
+  <summary>Unofficial desktop app for Microsoft Copilot</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="com.github.sirredbeard">
+    <name>Hayden Barnes</name>
+  </developer>
+  <description>
+    <p>
+      Unofficial Linux desktop app for Microsoft Copilot. Opens the official
+      Copilot web app in a GTK4 window with WebKitGTK, keeps your login
+      session on disk, and integrates with the desktop for launch, autostart,
+      downloads, print, and mic or camera access the site expects.
+    </p>
+    <p>
+      This project is not affiliated with, sponsored, or endorsed by Microsoft.
+      Microsoft, Copilot, and related marks are trademarks of Microsoft.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.github.sirredbeard.copilot-desktop-gtk.desktop</launchable>
+  <icon type="stock">com.github.sirredbeard.copilot-desktop-gtk</icon>
+  <url type="homepage">https://github.com/sirredbeard/copilot-desktop-gtk</url>
+  <url type="bugtracker">https://github.com/sirredbeard/copilot-desktop-gtk/issues</url>
+  <url type="vcs-browser">https://github.com/sirredbeard/copilot-desktop-gtk</url>
+  <url type="contribute">https://github.com/sirredbeard/copilot-desktop-gtk</url>
+  <project_group>GitHub</project_group>
+  <provides>
+    <binary>copilot-desktop-gtk</binary>
+    <id>com.github.sirredbeard.copilot-desktop-gtk.desktop</id>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <categories>
+    <category>Network</category>
+    <category>Office</category>
+    <category>Utility</category>
+  </categories>
+  <keywords>
+    <keyword>Copilot</keyword>
+    <keyword>Microsoft</keyword>
+    <keyword>AI</keyword>
+    <keyword>chat</keyword>
+    <keyword>assistant</keyword>
+  </keywords>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-info">mild</content_attribute>
+  </content_rating>
+  <branding>
+    <color type="primary" scheme_preference="light">#5b5fc7</color>
+    <color type="primary" scheme_preference="dark">#7f85f5</color>
+  </branding>
+  <releases>
+    <release version="0.1.0" date="2026-08-04" type="stable" urgency="medium">
+      <url type="details">https://github.com/sirredbeard/copilot-desktop-gtk/releases/tag/v0.1.0</url>
+      <description>
+        <p>Initial Flatpak release.</p>
+        <ul>
+          <li>Native AOT GTK4/WebKit shell for copilot.microsoft.com</li>
+          <li>Persistent login session under XDG data</li>
+          <li>Launchable icon, session autostart, downloads, print, media</li>
+          <li>GNOME Software metainfo and MIT license metadata</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>

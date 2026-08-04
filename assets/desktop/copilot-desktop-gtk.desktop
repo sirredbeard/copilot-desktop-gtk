@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Copilot Desktop
+GenericName=Microsoft Copilot
+Comment=Unofficial desktop app for Microsoft Copilot
+Exec=copilot-desktop-gtk %U
+Icon=copilot-desktop-gtk
+Terminal=false
+Categories=Network;GNOME;GTK;
+Keywords=AI;Copilot;GPT;ChatGPT;Microsoft;
+StartupNotify=true
+StartupWMClass=copilot-desktop-gtk
+SingleMainWindow=true
+MimeType=x-scheme-handler/copilotdesktop;

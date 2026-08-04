@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CopilotDesktopGtk</RootNamespace>
+    <AssemblyName>copilot-desktop-gtk</AssemblyName>
+    <Version>0.1.0</Version>
+    <InformationalVersion>0.1.0</InformationalVersion>
+    <Authors>Hayden Barnes</Authors>
+    <Description>Unofficial GTK4/WebKit wrapper for Microsoft Copilot on the Linux desktop.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/sirredbeard/copilot-desktop-gtk</RepositoryUrl>
+    <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <StackTraceSupport>false</StackTraceSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IlcDisableReflection>false</IlcDisableReflection>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <SupportedOSPlatformVersion>1.0</SupportedOSPlatformVersion>
+    <!-- GirCore packages ship net10.0 assets; net11 app consumes them. -->
+    <AssetTargetFallback>$(AssetTargetFallback);net10.0;net9.0;net8.0</AssetTargetFallback>
+    <NoWarn>$(NoWarn);CA1416;IL2104;IL3053</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GirCore.Gtk-4.0" Version="0.8.1" />
+    <PackageReference Include="GirCore.WebKit-6.0" Version="0.8.1" />
+    <PackageReference Include="GirCore.Adw-1" Version="0.8.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\html\offline.html" LogicalName="offline.html" />
+    <EmbeddedResource Include="..\..\assets\icons\copilot.png" LogicalName="copilot.png" />
+  </ItemGroup>
+
+</Project>

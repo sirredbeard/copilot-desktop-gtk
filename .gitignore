@@ -1,0 +1,35 @@
+# Build outputs
+dist/
+**/bin/
+**/obj/
+*.rpm
+*.tar.gz
+*.tar.xz
+!packaging/flatpak/sources/
+!packaging/flatpak/sources/**
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+*~
+
+# Dotnet
+project.lock.json
+project.fragment.lock.json
+artifacts/
+TestResults/
+
+# Local env
+.env
+.env.*
+*.log
+
+# Flatpak build trees
+*.flatpak
+dist/flatpak-build/
+dist/flatpak-repo/
+dist/flatpak-state/

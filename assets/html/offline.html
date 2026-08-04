@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Offline</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f5f9;
+      --fg: #1b1b1f;
+      --muted: #5c5c66;
+      --btn: #5b5fc7;
+      --btn-fg: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1b1b1f;
+        --fg: #f2f2f7;
+        --muted: #b0b0bb;
+        --btn: #7b7ff0;
+        --btn-fg: #101018;
+      }
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: "Segoe UI", system-ui, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    .wrap {
+      min-height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      box-sizing: border-box;
+    }
+    .card {
+      max-width: 28rem;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 0 0 0.75rem;
+    }
+    p {
+      margin: 0 0 1.5rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 0.5rem;
+      background: var(--btn);
+      color: var(--btn-fg);
+      font: inherit;
+      font-weight: 600;
+      padding: 0.7rem 1.25rem;
+      cursor: pointer;
+    }
+    button:focus-visible {
+      outline: 2px solid var(--btn);
+      outline-offset: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>You appear to be offline</h1>
+      <p>
+        Copilot Desktop could not reach Microsoft Copilot.
+        Check your network connection, then try again.
+      </p>
+      <button type="button" id="retry-btn">Retry</button>
+    </div>
+  </div>
+  <script>
+    document.getElementById('retry-btn').addEventListener('click', function () {
+      if (window.copilotDesktop && typeof window.copilotDesktop.retry === 'function') {
+        window.copilotDesktop.retry();
+      } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.copilotDesktop) {
+        window.webkit.messageHandlers.copilotDesktop.postMessage('retry');
+      } else {
+        window.location.href = 'https://copilot.microsoft.com/';
+      }
+    });
+  </script>
+</body>
+</html>
