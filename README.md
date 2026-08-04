@@ -11,7 +11,7 @@ This project is not affiliated with, sponsored, or endorsed by Microsoft. Micros
 ```bash
 # needs org.gnome.Platform//50 from Flathub
 flatpak install --user flathub org.gnome.Platform//50
-flatpak install --user ./com.github.sirredbeard.copilot-desktop-gtk-0.1.0.flatpak
+flatpak install --user ./com.github.sirredbeard.copilot-desktop-gtk-*.flatpak
 flatpak run com.github.sirredbeard.copilot-desktop-gtk
 ```
 
