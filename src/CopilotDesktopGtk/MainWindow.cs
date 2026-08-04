@@ -136,10 +136,13 @@ internal sealed class MainWindow : IDisposable
         s.EnableFullscreen = true;
         s.EnableSiteSpecificQuirks = true;
         s.EnableDeveloperExtras = false;
-        s.JavascriptCanOpenWindowsAutomatically = false;
+        // MS login (KMSI "Stay signed in") needs popups and a Chromium-class UA.
+        // Safari-on-Linux UA leaves the Yes button disabled/stuck on WebKitGTK.
+        s.JavascriptCanOpenWindowsAutomatically = true;
         s.JavascriptCanAccessClipboard = true;
         s.MediaPlaybackAllowsInline = true;
         s.MediaPlaybackRequiresUserGesture = false;
+        // WebKitGTK 6 only exposes Always/Never (OnDemand was removed).
         s.HardwareAccelerationPolicy = WebKit.HardwareAccelerationPolicy.Always;
         s.DefaultCharset = "UTF-8";
 
@@ -155,9 +158,11 @@ internal sealed class MainWindow : IDisposable
         s.DefaultMonospaceFontSize = 13;
         s.MinimumFontSize = 0;
 
+        // Chromium Linux UA: Microsoft serves a login stack that finishes enabling
+        // the KMSI Yes control. Safari UA on WebKitGTK often stalls that UI.
         s.UserAgent =
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15 CopilotDesktopGtk/" +
-            AppConstants.Version;
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/131.0.0.0 Safari/537.36";
         return s;
     }
 
@@ -402,6 +407,12 @@ internal sealed class MainWindow : IDisposable
                     _hasSuccessfulLoad = true;
                     _offlineBannerVisible = false;
                 }
+
+                // Re-run KMSI unlock after the login document finishes painting.
+                if (IsMicrosoftLoginUri(uri))
+                {
+                    InjectKmsiUnlock();
+                }
             }
         };
 
@@ -555,32 +566,142 @@ internal sealed class MainWindow : IDisposable
             }
         };
 
-        ucm.AddScript(WebKit.UserScript.New(
-            source: """
-                window.copilotDesktop = {
-                  retry: function () {
-                    try {
-                      window.webkit.messageHandlers.copilotDesktop.postMessage('retry');
-                    } catch (e) {}
+        var pageScript =
+            """
+            window.copilotDesktop = {
+              retry: function () {
+                try {
+                  window.webkit.messageHandlers.copilotDesktop.postMessage('retry');
+                } catch (e) {}
+              }
+            };
+            // Keep window.open in this WebView for product hops. Do not rewrite
+            // window.open on Microsoft login hosts - KMSI and federated login
+            // break when open() is replaced with location.assign.
+            (function () {
+              try {
+                var host = (location && location.hostname) ? location.hostname : '';
+                var loginHost = /(^|\.)(login\.live\.com|login\.microsoftonline\.com|login\.microsoft\.com|account\.live\.com|account\.microsoft\.com|aadcdn\.ms(auth|ftauth)\.net)$/i.test(host);
+                if (loginHost) return;
+                var nativeOpen = window.open;
+                window.open = function (url, name, specs) {
+                  if (url) {
+                    try { window.location.assign(url); } catch (e) { window.location.href = url; }
+                    return window;
                   }
+                  try { return nativeOpen ? nativeOpen.call(window, url, name, specs) : window; } catch (e) { return window; }
                 };
-                // Keep window.open in this WebView. Without this, some Copilot
-                // entry redirects use target=_blank and leave for the browser.
-                (function () {
-                  try {
-                    window.open = function (url) {
-                      if (url) {
-                        try { window.location.assign(url); } catch (e) { window.location.href = url; }
-                      }
-                      return window;
-                    };
-                  } catch (e) {}
-                })();
-                """,
+              } catch (e) {}
+            })();
+            """
+            + KmsiUnlockScript;
+
+        ucm.AddScript(WebKit.UserScript.New(
+            source: pageScript,
             injectedFrames: WebKit.UserContentInjectedFrames.AllFrames,
             injectionTime: WebKit.UserScriptInjectionTime.Start,
             allowList: null,
             blockList: null));
+    }
+
+    /// <summary>
+    /// login.live / login.microsoftonline KMSI and related auth hosts.
+    /// </summary>
+    private static bool IsMicrosoftLoginUri(string uri)
+    {
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
+        {
+            return false;
+        }
+
+        var host = parsed.Host;
+        return host.Equals("login.live.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".login.live.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("login.microsoftonline.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".login.microsoftonline.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("login.microsoft.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".login.microsoft.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("account.live.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("account.microsoft.com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Shared KMSI unlock body (user script + post-load inject).
+    /// </summary>
+    private const string KmsiUnlockScript = """
+        (function () {
+          function isKmsiHost() {
+            try {
+              var h = location.hostname || '';
+              return /(^|\.)(login\.live\.com|login\.microsoftonline\.com|login\.microsoft\.com|account\.live\.com|account\.microsoft\.com)$/i.test(h);
+            } catch (e) { return false; }
+          }
+          function unlockEl(el) {
+            if (!el) return;
+            try {
+              if (el.disabled) el.disabled = false;
+              if (el.hasAttribute && el.hasAttribute('disabled')) el.removeAttribute('disabled');
+              if (el.hasAttribute && el.hasAttribute('inert')) el.removeAttribute('inert');
+              if (el.getAttribute && el.getAttribute('aria-disabled') === 'true') el.setAttribute('aria-disabled', 'false');
+              if (el.tabIndex < 0) el.tabIndex = 0;
+              if (el.style) {
+                el.style.pointerEvents = 'auto';
+                el.style.cursor = 'pointer';
+                el.style.opacity = '1';
+              }
+              // Walk parents that often intercept clicks on KMSI.
+              var p = el.parentElement;
+              var depth = 0;
+              while (p && depth < 8) {
+                if (p.style) {
+                  if (p.style.pointerEvents === 'none') p.style.pointerEvents = 'auto';
+                }
+                if (p.hasAttribute && p.hasAttribute('inert')) p.removeAttribute('inert');
+                p = p.parentElement;
+                depth++;
+              }
+            } catch (e) {}
+          }
+          function unlockButtons(root) {
+            if (!root || !root.querySelectorAll) return;
+            // Classic MSA KMSI + modern Fluent primary actions.
+            var prefer = root.querySelectorAll(
+              '#idSIButton9, #idBtn_Accept, input[type=submit], button[type=submit], ' +
+              'button, input[type=button], [role=button], [data-testid], a'
+            );
+            for (var i = 0; i < prefer.length; i++) unlockEl(prefer[i]);
+          }
+          function tick() {
+            if (!isKmsiHost()) return;
+            unlockButtons(document);
+            var all = document.querySelectorAll('*');
+            for (var i = 0; i < all.length; i++) {
+              if (all[i].shadowRoot) unlockButtons(all[i].shadowRoot);
+            }
+          }
+          try {
+            tick();
+            if (!window.__copilotKmsiUnlockTimer) {
+              window.__copilotKmsiUnlockTimer = setInterval(tick, 350);
+            }
+            document.addEventListener('DOMContentLoaded', tick, true);
+            window.addEventListener('load', tick, true);
+            if (window.MutationObserver && !window.__copilotKmsiMo) {
+              window.__copilotKmsiMo = new MutationObserver(function () { tick(); });
+              try {
+                window.__copilotKmsiMo.observe(document.documentElement || document, {
+                  childList: true, subtree: true, attributes: true,
+                  attributeFilter: ['disabled', 'aria-disabled', 'class', 'style']
+                });
+              } catch (e) {}
+            }
+          } catch (e) {}
+        })();
+        """;
+
+    private void InjectKmsiUnlock()
+    {
+        _ = _webView.EvaluateJavascriptAsync(KmsiUnlockScript);
     }
 
     private void ShowOfflineBanner()
