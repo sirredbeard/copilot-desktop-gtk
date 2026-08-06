@@ -1,6 +1,6 @@
 # Copilot
 
-Unofficial Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.com).
+**Unofficial** Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.com).
 
 <img width="1150" height="850" alt="Screenshot From 2026-08-04 04-45-27" src="https://github.com/user-attachments/assets/dc65f927-0c6d-4a34-afe6-49bb4934d29b" />
 
@@ -20,12 +20,6 @@ The `.flatpakref` adds the project remote for updates, embeds the Pages
 signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when
 needed.
 
-System installs (for example a desktop image that puts the app under
-`/var/lib/flatpak`) need that GPG path so non-root `flatpak update` and
-GNOME Software can pull without root. Polkit still has to allow Deploy in
-an active local session; GPG is the trust check, not a substitute for
-polkit.
-
 ## Offline artifacts on GitHub Releases
 
 [Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) include:
@@ -33,9 +27,7 @@ polkit.
 * A single-file `.flatpak` bundle for side-loading
 * A bare Native AOT binary
 
-Prefer the `.flatpakref` when you want `flatpak update` from Pages. Bundles
-are built with `flatpak build-bundle --repo-url=` pointing at the same
-Pages ostree when possible.
+Prefer the `.flatpakref` when you want `flatpak update`. Bundles are built with `flatpak build-bundle --repo-url=`.
 
 ## Build with Podman
 
