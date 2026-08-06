@@ -2,11 +2,19 @@
 
 **Unofficial** Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.com).
 
-<img width="1150" height="850" alt="Screenshot From 2026-08-04 04-45-27" src="https://github.com/user-attachments/assets/dc65f927-0c6d-4a34-afe6-49bb4934d29b" />
-
 Built with .NET 11, GTK4, and WebKitGTK, shipped via Flatpak.
 
-This project is not affiliated with, sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks are trademarks of Microsoft.
+* .NET build: AOT, self-contained, speed-optimized build
+* GTK4 using [Gir.Core](https://github.com/gircore/gir.core)
+* Flatpak uses latest [GNOME 50 Runtime](https://docs.flatpak.org/en/latest/available-runtimes.html) with latest stable [WebKitGTK](https://webkitgtk.org/)
+* This repo is also a Flatpak repo that provides updates for this app, implemented using GitHub Pages, GPG-signed (I wrote a [guide](https://github.com/sirredbeard/github-pages-flatpak-repo) on how to do this)
+* Fully [automated builds](https://github.com/sirredbeard/copilot-desktop-gtk/blob/main/.github/workflows/release.yml) from GitHub Actions, built using an Azure Linux-based [build container](https://github.com/sirredbeard/copilot-desktop-gtk/blob/main/container/Dockerfile)
+
+**This project is not affiliated with, sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks are trademarks of Microsoft.**
+
+<img width="1294" height="648" alt="01-desktop" src="https://github.com/user-attachments/assets/fdb38a9c-4a6d-4eaa-8d89-ec18fdb62dc5" />
+
+<img width="1291" height="932" alt="Screenshot From 2026-08-06 19-32-15" src="https://github.com/user-attachments/assets/205b59ad-61fe-46b7-9604-b53e3eb9259b" />
 
 ## Install from GitHub
 
@@ -16,18 +24,14 @@ flatpak install --user --from \
 flatpak run com.github.sirredbeard.copilot-desktop-gtk
 ```
 
-The `.flatpakref` adds the project remote for updates, embeds the Pages
-signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when
-needed.
+The `.flatpakref` adds the project repo for updates to Flatpak, embeds the repo signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when needed.
 
 ## Offline artifacts on GitHub Releases
 
 [Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) include:
 
 * A single-file `.flatpak` bundle for side-loading
-* A bare Native AOT binary
-
-Prefer the `.flatpakref` when you want `flatpak update`. Bundles are built with `flatpak build-bundle --repo-url=`.
+* A bare Native AOT binary (does not use GNOME runtime)
 
 ## Build with Podman
 
