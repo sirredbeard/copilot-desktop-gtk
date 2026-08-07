@@ -13,34 +13,35 @@ finish-args:
   - --socket=fallback-x11
   - --share=ipc
   - --device=dri
-  # Camera (V4L2) + PipeWire camera nodes for WebRTC / vision
-  - --device=all
-  # Audio in/out (PipeWire / Pulse)
+  # Audio in/out + PipeWire camera nodes for WebRTC / vision.
+  # No --device=all: camera goes through the Camera portal and PipeWire,
+  # not raw /dev/video* or other host device nodes.
   - --socket=pulseaudio
   - --filesystem=xdg-run/pipewire-0
   # Network for Copilot + auth
   - --share=network
-  # File uploads / downloads; portal FileChooser covers the rest
+  # Downloads + common XDG dirs for drag-drop / file inputs.
+  # FileChooser portal still covers picks outside these paths.
   - --filesystem=xdg-download:rw
   - --filesystem=xdg-documents:ro
   - --filesystem=xdg-pictures:ro
   - --filesystem=xdg-videos:ro
   - --filesystem=xdg-music:ro
   - --filesystem=xdg-desktop:ro
-  # Host fonts so Microsoft web UI metrics look right
+  # Host fonts so Microsoft web UI metrics look right.
+  # Do not bind /usr/share/fonts: Flatpak reserves /usr and rejects it
+  # ("Path /usr is reserved"). Runtime fonts + user/XDG fonts cover us.
   - --filesystem=xdg-data/fonts:ro
   - --filesystem=xdg-config/fontconfig:ro
-  - --filesystem=/usr/share/fonts:ro
-  - --filesystem=/usr/local/share/fonts:ro
   - --filesystem=~/.fonts:ro
+  - --filesystem=~/.local/share/fonts:ro
   # Print (CUPS + portal)
   - --socket=cups
   - --talk-name=org.freedesktop.portal.Print
   # User autostart toggle writes here
   - --filesystem=xdg-config/autostart:create
-  # Notifications, secrets, portals
+  # Notifications + portals (no libsecret: login is WebKit cookies on disk)
   - --talk-name=org.freedesktop.Notifications
-  - --talk-name=org.freedesktop.secrets
   - --talk-name=org.freedesktop.portal.Desktop
   - --talk-name=org.freedesktop.portal.Documents
   - --talk-name=org.freedesktop.portal.FileChooser
@@ -49,9 +50,9 @@ finish-args:
   - --talk-name=org.freedesktop.portal.Background
   - --talk-name=org.freedesktop.portal.Camera
   - --own-name=com.github.sirredbeard.copilot-desktop-gtk
-  # Optional SNI watcher probe only (no tray library shipped)
+  # Optional SNI watcher probe only (no tray library shipped).
+  # Probe talks to this name directly; no org.freedesktop.DBus talk-name.
   - --talk-name=org.kde.StatusNotifierWatcher
-  - --talk-name=org.freedesktop.DBus
   # Persistent WebKit cookies / localStorage / IndexedDB
   - --persist=.local/share/copilot-desktop-gtk
 modules:
