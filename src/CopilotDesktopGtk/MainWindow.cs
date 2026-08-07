@@ -634,8 +634,12 @@ internal sealed class MainWindow : IDisposable
             blockList: null));
 
         // KMSI unlock only on MSA / Entra login hosts (URI allow-list).
+        // WebKitDebug turns on in-page copilot-kmsi console diagnostics.
+        var kmsiSource = _profile.WebKitDebug
+            ? "window.__copilotKmsiVerbose = true;\n" + KmsiUnlockScript
+            : KmsiUnlockScript;
         ucm.AddScript(WebKit.UserScript.New(
-            source: KmsiUnlockScript,
+            source: kmsiSource,
             injectedFrames: WebKit.UserContentInjectedFrames.AllFrames,
             injectionTime: WebKit.UserScriptInjectionTime.Start,
             allowList: MicrosoftLoginScriptAllowList,
@@ -660,6 +664,13 @@ internal sealed class MainWindow : IDisposable
         "https://*.aadcdn.msauth.net/*",
         "https://aadcdn.msftauth.net/*",
         "https://*.aadcdn.msftauth.net/*",
+        // Modern MSA shells often park UI on the CDN origin or nested frames.
+        "https://logincdn.msauth.net/*",
+        "https://*.logincdn.msauth.net/*",
+        "https://logincdn.msftauth.net/*",
+        "https://*.logincdn.msftauth.net/*",
+        "https://*.msauth.net/*",
+        "https://*.msftauth.net/*",
     ];
 
     /// <summary>
@@ -680,22 +691,26 @@ internal sealed class MainWindow : IDisposable
                host.Equals("login.microsoft.com", StringComparison.OrdinalIgnoreCase) ||
                host.EndsWith(".login.microsoft.com", StringComparison.OrdinalIgnoreCase) ||
                host.Equals("account.live.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("account.microsoft.com", StringComparison.OrdinalIgnoreCase);
+               host.Equals("account.microsoft.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("logincdn.msauth.net", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".logincdn.msauth.net", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("logincdn.msftauth.net", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".logincdn.msftauth.net", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".msauth.net", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".msftauth.net", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
-    /// Shared KMSI unlock + force-complete body (user script + post-load inject).
-    /// Our WebKit cookie jar already persists sessions across launches; KMSI Yes
-    /// just extends MSA cookie lifetime. Force-completing unblocks WebKitGTK when
-    /// Microsoft leaves Yes grayed after capability checks fail.
+    /// KMSI unlock on login hosts only. Polyfill UA-CH (WebKitGTK has none),
+    /// enable a grayed Yes, and click it once when the page is clearly
+    /// "Stay signed in?". No form.submit and no WebAuthn stubs - those broke
+    /// password/MFA (false "password is incorrect" / passkey errors).
     /// </summary>
     private const string KmsiUnlockScript = """
         (function () {
           if (window.__copilotKmsiBooted) return;
           window.__copilotKmsiBooted = true;
 
-          // Client Hints polyfill: MSA feature-detects Chromium UA-CH. WebKitGTK
-          // has none, which correlates with a permanently disabled KMSI Yes.
           try {
             if (!navigator.userAgentData) {
               var brands = [
@@ -730,10 +745,10 @@ internal sealed class MainWindow : IDisposable
             }
           } catch (e) {}
 
-          function isKmsiHost() {
+          function isLoginHost() {
             try {
               var h = location.hostname || '';
-              return /(^|\.)(login\.live\.com|login\.microsoftonline\.com|login\.microsoft\.com|account\.live\.com|account\.microsoft\.com)$/i.test(h)
+              return /(^|\.)(login\.live\.com|login\.microsoftonline\.com|login\.microsoft\.com|account\.live\.com|account\.microsoft\.com|logincdn\.msauth\.net|logincdn\.msftauth\.net|msauth\.net|msftauth\.net)$/i.test(h)
                 || location.protocol === 'file:'
                 || h === '127.0.0.1' || h === 'localhost';
             } catch (e) { return false; }
@@ -741,7 +756,8 @@ internal sealed class MainWindow : IDisposable
 
           function pageLooksLikeKmsi() {
             try {
-              var t = (document.body && (document.body.innerText || document.body.textContent)) || '';
+              var t = ((document.body && (document.body.innerText || document.body.textContent)) || '') + '\n' + (document.title || '');
+              // Strict: only the KMSI prompt. Do not match MFA / password errors.
               return /Stay signed in\?/i.test(t) || /Keep me signed in/i.test(t);
             } catch (e) { return false; }
           }
@@ -759,180 +775,80 @@ internal sealed class MainWindow : IDisposable
               if (el.removeAttribute) {
                 el.removeAttribute('disabled');
                 el.removeAttribute('aria-disabled');
-                el.removeAttribute('inert');
               }
               if (el.setAttribute) el.setAttribute('aria-disabled', 'false');
-              if (el.tabIndex < 0) el.tabIndex = 0;
-              if (el.classList) {
-                ['disabled', 'is-disabled', 'fui-Button--disabled', 'win-button-disabled'].forEach(function (c) {
-                  try { el.classList.remove(c); } catch (e) {}
-                });
-              }
               if (el.style) {
                 el.style.pointerEvents = 'auto';
-                el.style.cursor = 'pointer';
                 el.style.opacity = '1';
-                el.style.filter = 'none';
-              }
-              var p = el.parentElement, depth = 0;
-              while (p && depth < 10) {
-                if (p.style && p.style.pointerEvents === 'none') p.style.pointerEvents = 'auto';
-                if (p.removeAttribute) p.removeAttribute('inert');
-                p = p.parentElement;
-                depth++;
+                el.style.cursor = 'pointer';
               }
             } catch (e) {}
           }
 
-          function collectButtons(root, out) {
-            if (!root || !root.querySelectorAll) return;
-            var nodes = root.querySelectorAll(
-              '#idSIButton9, #idBtn_Accept, #acceptButton, button, input[type=submit], input[type=button], [role=button], [data-testid]'
-            );
-            for (var i = 0; i < nodes.length; i++) out.push(nodes[i]);
-            var all = root.querySelectorAll ? root.querySelectorAll('*') : [];
-            for (var j = 0; j < all.length; j++) {
-              if (all[j].shadowRoot) collectButtons(all[j].shadowRoot, out);
-            }
-          }
-
-          function findYesNo() {
-            var buttons = [];
-            collectButtons(document, buttons);
-            var yes = null, no = null;
-            // #idSIButton9 is Next on email/password steps AND Yes on KMSI.
-            // Only treat it as Yes when the page is actually "Stay signed in?".
+          function findYes() {
+            var nodes = document.querySelectorAll
+              ? document.querySelectorAll('#idSIButton9, #idBtn_Accept, button, input[type=submit], [role=button]')
+              : [];
             var kmsi = pageLooksLikeKmsi();
-            for (var i = 0; i < buttons.length; i++) {
-              var t = textOf(buttons[i]);
-              if (!yes && (/^yes$/i.test(t) || /^accept$/i.test(t))) yes = buttons[i];
-              if (!yes && kmsi && (buttons[i].id === 'idSIButton9' || buttons[i].id === 'idBtn_Accept')) yes = buttons[i];
-              if (!no && (/^no$/i.test(t) || /^decline$/i.test(t))) no = buttons[i];
-              if (!no && kmsi && buttons[i].id === 'idBtn_Back') no = buttons[i];
+            var yes = null;
+            for (var i = 0; i < nodes.length; i++) {
+              var t = textOf(nodes[i]);
+              if (/^yes$/i.test(t) || /^accept$/i.test(t)) { yes = nodes[i]; break; }
             }
-            return { yes: yes, no: no, all: buttons };
+            // #idSIButton9 is Next on email/password - only treat as Yes on KMSI.
+            if (!yes && kmsi) {
+              yes = document.getElementById('idSIButton9') || document.getElementById('idBtn_Accept');
+            }
+            return yes;
           }
 
-          function fireClick(el) {
-            if (!el) return false;
+          function clickYes(el) {
+            if (!el) return;
             unlockEl(el);
             try { el.focus(); } catch (e) {}
-            var opts = { bubbles: true, cancelable: true, view: window, buttons: 1, composed: true };
-            try { el.dispatchEvent(new PointerEvent('pointerdown', opts)); } catch (e) {}
-            try { el.dispatchEvent(new MouseEvent('mousedown', opts)); } catch (e) {}
-            try { el.dispatchEvent(new PointerEvent('pointerup', opts)); } catch (e) {}
-            try { el.dispatchEvent(new MouseEvent('mouseup', opts)); } catch (e) {}
+            var opts = { bubbles: true, cancelable: true, view: window, buttons: 1 };
             try { el.dispatchEvent(new MouseEvent('click', opts)); } catch (e) {}
             try { if (typeof el.click === 'function') el.click(); } catch (e) {}
-            // React 17+ props on DOM nodes.
-            try {
-              var keys = Object.keys(el);
-              for (var i = 0; i < keys.length; i++) {
-                var k = keys[i];
-                if (k.indexOf('__reactProps$') === 0 || k.indexOf('__reactEventHandlers$') === 0) {
-                  var props = el[k];
-                  if (props && typeof props.onClick === 'function') {
-                    props.onClick({
-                      preventDefault: function () {},
-                      stopPropagation: function () {},
-                      nativeEvent: new MouseEvent('click', opts),
-                      target: el,
-                      currentTarget: el,
-                      type: 'click',
-                      bubbles: true,
-                      cancelable: true,
-                      defaultPrevented: false,
-                      isTrusted: true
-                    });
-                  }
-                }
-              }
-            } catch (e) {}
-            // Classic form post.
-            try {
-              var form = el.form || (el.closest && el.closest('form'));
-              if (form) {
-                var hidden = form.querySelector('input[name="kmsi"], input[name="Kmsi"], input[name="DontShowAgain"]');
-                if (hidden) { try { hidden.value = 'true'; } catch (e) {} }
-                if (typeof form.requestSubmit === 'function') form.requestSubmit(el);
-                else form.submit();
-              }
-            } catch (e) {}
-            return true;
-          }
-
-          function diagnose(pair) {
-            // Quiet by default; enable with COPILOT_WEBKIT_DEBUG on the host.
-            try {
-              if (!window.__copilotKmsiVerbose) return;
-              var info = (pair.all || []).slice(0, 12).map(function (b) {
-                return {
-                  tag: b.tagName,
-                  id: b.id || '',
-                  text: textOf(b).slice(0, 40),
-                  disabled: !!b.disabled,
-                  aria: b.getAttribute && b.getAttribute('aria-disabled'),
-                  cls: (b.className && b.className.toString) ? b.className.toString().slice(0, 80) : ''
-                };
-              });
-              console.log('copilot-kmsi', location.href, 'looks=' + pageLooksLikeKmsi(), info);
-            } catch (e) {}
           }
 
           function tick() {
-            if (!isKmsiHost()) return;
-            // Never run force-complete on email/password. MSA reuses
-            // #idSIButton9 for Next; auto-click there POSTs /common/login with
-            // an empty login field (AADSTS90100) and cancels the real navigation.
-            if (!pageLooksLikeKmsi()) {
+            if (!isLoginHost() || !pageLooksLikeKmsi()) {
               window.__copilotKmsiForceAt = 0;
-              window.__copilotKmsiForced = false;
               return;
             }
-            var pair = findYesNo();
-            diagnose(pair);
-            if (pair.yes) {
-              unlockEl(pair.yes);
-              // First try enabling for a real user click; after a short settle,
-              // force-complete so WebKitGTK never traps the user on a gray Yes.
-              if (!window.__copilotKmsiForceAt) {
-                window.__copilotKmsiForceAt = Date.now() + 1200;
-              }
-              if (Date.now() >= window.__copilotKmsiForceAt && !window.__copilotKmsiForced) {
-                window.__copilotKmsiForced = true;
-                if (window.__copilotKmsiVerbose) console.log('copilot-kmsi force-click Yes');
-                fireClick(pair.yes);
-                // Retry a couple times if React re-disables.
-                setTimeout(function () { fireClick(pair.yes); }, 400);
-                setTimeout(function () { fireClick(pair.yes); }, 1200);
-              }
+            var yes = findYes();
+            if (!yes) return;
+            unlockEl(yes);
+            if (!window.__copilotKmsiForceAt) {
+              window.__copilotKmsiForceAt = Date.now() + 1000;
             }
-          }
-
-          function scheduleTick() {
-            if (window.__copilotKmsiTickQueued) return;
-            window.__copilotKmsiTickQueued = true;
-            setTimeout(function () {
-              window.__copilotKmsiTickQueued = false;
-              tick();
-            }, 150);
+            if (Date.now() >= window.__copilotKmsiForceAt && !window.__copilotKmsiForced) {
+              window.__copilotKmsiForced = true;
+              if (window.__copilotKmsiVerbose) console.log('copilot-kmsi click Yes', location.href);
+              clickYes(yes);
+            }
           }
 
           try {
-            // Only login hosts get this script (UserScript allow-list).
             tick();
             if (!window.__copilotKmsiUnlockTimer) {
-              // 750ms is enough for KMSI; 400ms was needlessly hot.
-              window.__copilotKmsiUnlockTimer = setInterval(tick, 750);
+              window.__copilotKmsiUnlockTimer = setInterval(tick, 700);
             }
             document.addEventListener('DOMContentLoaded', tick, true);
             window.addEventListener('load', tick, true);
             if (window.MutationObserver && !window.__copilotKmsiMo) {
-              window.__copilotKmsiMo = new MutationObserver(scheduleTick);
+              window.__copilotKmsiMo = new MutationObserver(function () {
+                if (window.__copilotKmsiTickQueued) return;
+                window.__copilotKmsiTickQueued = true;
+                setTimeout(function () {
+                  window.__copilotKmsiTickQueued = false;
+                  tick();
+                }, 120);
+              });
               try {
                 window.__copilotKmsiMo.observe(document.documentElement || document, {
                   childList: true, subtree: true, attributes: true,
-                  attributeFilter: ['disabled', 'aria-disabled', 'class', 'style']
+                  attributeFilter: ['disabled', 'aria-disabled', 'class']
                 });
               } catch (e) {}
             }
@@ -942,7 +858,10 @@ internal sealed class MainWindow : IDisposable
 
     private void InjectKmsiUnlock()
     {
-        _ = _webView.EvaluateJavascriptAsync(KmsiUnlockScript);
+        var source = _profile.WebKitDebug
+            ? "window.__copilotKmsiVerbose = true;\n" + KmsiUnlockScript
+            : KmsiUnlockScript;
+        _ = _webView.EvaluateJavascriptAsync(source);
     }
 
     private void ShowOfflineBanner()

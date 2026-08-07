@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Local WebKitGTK harness for KMSI Yes unlock/force-click script.
 
-Loads a mock "Stay signed in?" page with a disabled Yes button, injects the
-same logic we ship in MainWindow, and asserts Yes was clicked within a few
-seconds. No network. No release dependency.
+Loads a mock "Stay signed in?" page with a disabled Yes button + busy overlay,
+injects MainWindow.KmsiUnlockScript from source, and asserts Yes was clicked.
+No network. No release dependency.
 """
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
+from pathlib import Path
 
 import gi
 
@@ -17,86 +19,35 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
 from gi.repository import GLib, Gtk, WebKit  # noqa: E402
 
-# Keep in sync with MainWindow.KmsiUnlockScript intent (force-click Yes).
-SCRIPT = r"""
-(function () {
-  if (window.__copilotKmsiBooted) return;
-  window.__copilotKmsiBooted = true;
-  try {
-    if (!navigator.userAgentData) {
-      var brands = [
-        { brand: 'Chromium', version: '131' },
-        { brand: 'Microsoft Edge', version: '131' },
-        { brand: 'Not_A Brand', version: '24' }
-      ];
-      var uad = {
-        brands: brands, mobile: false, platform: 'Windows',
-        getHighEntropyValues: function () {
-          return Promise.resolve({ brands: brands, mobile: false, platform: 'Windows',
-            platformVersion: '15.0.0', architecture: 'x86', bitness: '64', model: '',
-            uaFullVersion: '131.0.0.0', fullVersionList: brands });
-        }
-      };
-      try { Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: function () { return uad; } }); }
-      catch (e) { try { navigator.userAgentData = uad; } catch (e2) {} }
-    }
-  } catch (e) {}
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = ROOT / "src" / "CopilotDesktopGtk" / "MainWindow.cs"
 
-  function pageLooksLikeKmsi() {
-    try {
-      var t = (document.body && (document.body.innerText || document.body.textContent)) || '';
-      return /Stay signed in\?/i.test(t);
-    } catch (e) { return false; }
-  }
-  function textOf(el) {
-    return ((el.innerText || el.textContent || el.value || '') + '').replace(/\s+/g, ' ').trim();
-  }
-  function unlockEl(el) {
-    if (!el) return;
-    try { el.disabled = false; } catch (e) {}
-    if (el.removeAttribute) { el.removeAttribute('disabled'); el.removeAttribute('aria-disabled'); }
-    if (el.style) { el.style.pointerEvents = 'auto'; el.style.opacity = '1'; }
-  }
-  function findYes() {
-    var nodes = document.querySelectorAll('button, input[type=submit], [role=button]');
-    for (var i = 0; i < nodes.length; i++) {
-      if (/^yes$/i.test(textOf(nodes[i])) || nodes[i].id === 'idSIButton9') return nodes[i];
-    }
-    return null;
-  }
-  function fireClick(el) {
-    unlockEl(el);
-    var opts = { bubbles: true, cancelable: true, view: window, buttons: 1 };
-    try { el.dispatchEvent(new MouseEvent('click', opts)); } catch (e) {}
-    try { el.click(); } catch (e) {}
-  }
-  function tick() {
-    if (!pageLooksLikeKmsi()) return;
-    var yes = findYes();
-    if (!yes) return;
-    unlockEl(yes);
-    if (!window.__copilotKmsiForceAt) window.__copilotKmsiForceAt = Date.now() + 400;
-    if (Date.now() >= window.__copilotKmsiForceAt && !window.__copilotKmsiForced) {
-      window.__copilotKmsiForced = true;
-      fireClick(yes);
-    }
-  }
-  setInterval(tick, 200);
-  tick();
-})();
-"""
+
+def load_kmsi_script() -> str:
+    text = MAIN.read_text(encoding="utf-8")
+    match = re.search(
+        r'private const string KmsiUnlockScript = """(.*?)""";',
+        text,
+        re.S,
+    )
+    if not match:
+        raise SystemExit(f"KmsiUnlockScript not found in {MAIN}")
+    return match.group(1)
+
 
 HTML = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>KMSI mock</title></head>
 <body style="background:#1b1b1b;color:#fff;font-family:sans-serif">
   <h1>Stay signed in?</h1>
   <p>Skip having to sign in every time.</p>
-  <button id="yesBtn" disabled aria-disabled="true"
+  <div class="ProgressRing" aria-busy="true"
+       style="position:fixed;inset:0;pointer-events:auto;background:transparent"></div>
+  <button id="idSIButton9" disabled aria-disabled="true"
           style="opacity:.5;pointer-events:none">Yes</button>
-  <button id="noBtn">No</button>
+  <button id="idBtn_Back">No</button>
   <script>
     window.__yesClicked = false;
-    document.getElementById('yesBtn').addEventListener('click', function () {
+    document.getElementById('idSIButton9').addEventListener('click', function () {
       window.__yesClicked = true;
       document.title = 'YES_CLICKED';
     });
@@ -106,6 +57,7 @@ HTML = """<!DOCTYPE html>
 
 
 def main() -> int:
+    script = load_kmsi_script()
     Gtk.init()
     loop = GLib.MainLoop()
     result = {"ok": False, "err": "timeout"}
@@ -121,7 +73,7 @@ def main() -> int:
     ucm = view.get_user_content_manager()
     ucm.add_script(
         WebKit.UserScript.new(
-            SCRIPT,
+            "window.__copilotKmsiVerbose = true;\n" + script,
             WebKit.UserContentInjectedFrames.ALL_FRAMES,
             WebKit.UserScriptInjectionTime.START,
             None,
@@ -150,7 +102,7 @@ def main() -> int:
                 result["err"] = ""
                 loop.quit()
                 return False
-            return True  # keep polling until deadline
+            return True
 
         GLib.timeout_add(200, check)
 
@@ -158,7 +110,6 @@ def main() -> int:
 
     def deadline():
         if not result["ok"]:
-            # title fallback
             title = view.get_title() or ""
             if title == "YES_CLICKED":
                 result["ok"] = True
@@ -168,7 +119,7 @@ def main() -> int:
         loop.quit()
         return False
 
-    GLib.timeout_add(4000, deadline)
+    GLib.timeout_add(8000, deadline)
     view.load_uri(uri)
     win.present()
     loop.run()
