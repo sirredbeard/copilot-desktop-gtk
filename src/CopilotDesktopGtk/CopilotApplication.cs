@@ -219,13 +219,8 @@ internal sealed class CopilotApplication
                     autostartEnabled: Autostart.IsEnabled());
                 trayOk = _tray is not null;
             }
-            else
-            {
-                Console.WriteLine(
-                    "tray: no StatusNotifier host on the session bus " +
-                    "(plain GNOME needs an AppIndicator extension); " +
-                    "running as a normal windowed app");
-            }
+            // No SNI host (stock GNOME): normal windowed app. Stay quiet;
+            // tray is optional and not a product feature.
         }
 
         // Hold the application only when close-to-tray is active so hiding

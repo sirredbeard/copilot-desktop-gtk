@@ -11,7 +11,11 @@ internal static class StatusNotifierHost
     public const string WatcherName = "org.kde.StatusNotifierWatcher";
 
     /// <summary>
-    /// True when something on the session bus owns the SNI watcher name.
+    /// True when a StatusNotifier host is registered with the session
+    /// watcher (<c>IsStatusNotifierHostRegistered</c>). Missing watcher,
+    /// failed call, or property false all mean no tray. Calls the watcher
+    /// name directly so Flatpak does not need talk access to
+    /// <c>org.freedesktop.DBus</c> for <c>NameHasOwner</c>.
     /// </summary>
     public static bool IsAvailable()
     {
@@ -23,14 +27,20 @@ internal static class StatusNotifierHost
                 return false;
             }
 
-            var args = GLib.Variant.NewTuple([GLib.Variant.NewString(WatcherName)]);
+            // Standard SNI path. Missing watcher => CallSync throws/null.
+            // Watcher present but no host => property is false. Both: no tray.
+            var args = GLib.Variant.NewTuple(
+            [
+                GLib.Variant.NewString("org.kde.StatusNotifierWatcher"),
+                GLib.Variant.NewString("IsStatusNotifierHostRegistered"),
+            ]);
             var reply = bus.CallSync(
-                busName: "org.freedesktop.DBus",
-                objectPath: "/org/freedesktop/DBus",
-                interfaceName: "org.freedesktop.DBus",
-                methodName: "NameHasOwner",
+                busName: WatcherName,
+                objectPath: "/StatusNotifierWatcher",
+                interfaceName: "org.freedesktop.DBus.Properties",
+                methodName: "Get",
                 parameters: args,
-                replyType: GLib.VariantType.New("(b)"),
+                replyType: GLib.VariantType.New("(v)"),
                 flags: Gio.DBusCallFlags.None,
                 timeoutMsec: 1500,
                 cancellable: null);
@@ -40,12 +50,22 @@ internal static class StatusNotifierHost
                 return false;
             }
 
-            using var child = reply.GetChildValue(0);
-            return child.GetBoolean();
+            using var variant = reply.GetChildValue(0);
+            using var inner = variant.GetVariant();
+            return inner.GetBoolean();
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"statusnotifier probe: {ex.Message}");
+            // ServiceUnknown / name has no owner is normal on plain GNOME.
+            // Only log unexpected probe failures.
+            var msg = ex.Message ?? string.Empty;
+            if (!msg.Contains("ServiceUnknown", StringComparison.Ordinal)
+                && !msg.Contains("NameHasNoOwner", StringComparison.Ordinal)
+                && !msg.Contains("was not provided by any", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine($"statusnotifier probe: {msg}");
+            }
+
             return false;
         }
     }
