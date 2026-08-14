@@ -1,16 +1,17 @@
 # copilot-desktop-gtk-builder
 #
 # Azure Linux 4 base, Fedora 43 repos for GTK4/WebKit devel, side-loaded
-# .NET 11 preview SDK, and Flatpak builder tooling. CI and local podman
-# builds produce the Native AOT binary and the Flatpak bundle entirely
-# inside this image. Rebuilt weekly via builder-image.yml.
+# .NET 11 SDK, and Flatpak builder tooling. ARG DOTNET_SDK_VERSION below
+# is a fallback pin. CI and ./scripts/build-builder-image.sh pass the
+# latest SDK from resolve-dotnet-sdk.sh. Rebuilt weekly via
+# builder-image.yml.
 #
-# Build:  podman build -t copilot-desktop-gtk-builder -f container/Dockerfile .
-# Run:    podman run --rm -v "$PWD":/src:Z copilot-desktop-gtk-builder ./scripts/build-all.sh
+# Build:  ./scripts/build-builder-image.sh
+# Run:    ./scripts/podman-build-local.sh
 
 FROM mcr.microsoft.com/azurelinux-beta/base/core:4.0
 
-ARG DOTNET_SDK_VERSION=11.0.100-preview.6.26359.118
+ARG DOTNET_SDK_VERSION=11.0.100-preview.7.26381.103
 ARG FEDORA_RELEASE=43
 
 LABEL org.opencontainers.image.title="copilot-desktop-gtk-builder" \

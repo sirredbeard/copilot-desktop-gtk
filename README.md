@@ -4,7 +4,7 @@ Unofficial Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.c
 
 <img width="1150" height="850" alt="Screenshot From 2026-08-04 04-45-27" src="https://github.com/user-attachments/assets/dc65f927-0c6d-4a34-afe6-49bb4934d29b" />
 
-Built with .NET 11, GTK4, and WebKitGTK, shipped via Flatpak.
+Built with the latest .NET 11 SDK, GTK4, and WebKitGTK, shipped via Flatpak.
 
 This project is not affiliated with, sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks are trademarks of Microsoft.
 
@@ -39,7 +39,7 @@ Pages ostree when possible.
 
 ## Build with Podman
 
-Uses the project builder image (Azure Linux 4 + .NET 11 + Flatpak tooling).
+Uses the project builder image (Azure Linux 4 + latest .NET 11 SDK + Flatpak tooling).
 
 ```bash
 # once: build the local builder image (or: ./scripts/podman-build-local.sh --pull-ghcr)
