@@ -10,6 +10,11 @@ name: release
 
 on:
   workflow_dispatch:
+    inputs:
+      snapshot:
+        description: Build artifacts only. Do not publish Pages or create a release.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -18,7 +23,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: release-pages
+  group: ${{ github.event.inputs.snapshot == 'true' && format('snapshot-{0}', github.ref_name) || 'release-pages' }}
   cancel-in-progress: false
 
 env:
@@ -60,10 +65,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          SNAPSHOT: ${{ github.event.inputs.snapshot }}
         run: |
           set -euo pipefail
           V="$(./scripts/next-version.sh)"
           echo "version=$V" >> "$GITHUB_OUTPUT"
+          if [[ "${SNAPSHOT:-}" == "true" ]]; then
+            echo "tag=snapshot-$V" >> "$GITHUB_OUTPUT"
+            echo "snapshot build: $V (no release, no Pages)"
+            exit 0
+          fi
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
           echo "next release: v$V"
           if gh release view "v$V" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -93,12 +104,13 @@ jobs:
       - name: Build AOT + Flatpak
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          SNAPSHOT: ${{ github.event.inputs.snapshot }}
         run: |
           set -euo pipefail
           V="${{ steps.ver.outputs.version }}"
           export COPILOT_VERSION="$V"
           export FLATPAK_BRANCH=stable
-          if [[ -z "${GPG_PRIVATE_KEY:-}" ]]; then
+          if [[ -z "${GPG_PRIVATE_KEY:-}" && "${SNAPSHOT:-}" != "true" ]]; then
             echo "error: GPG_PRIVATE_KEY secret is required to sign the Pages Flatpak repo" >&2
             exit 1
           fi
@@ -112,6 +124,7 @@ jobs:
           find dist/publish dist/flatpak dist/flatpak-repo -maxdepth 2 -type f -printf '%s %p\n' | sort -n | tail -40
 
       - name: Stage GitHub Pages site
+        if: github.event.inputs.snapshot != 'true'
         env:
           PAGES_OWNER: ${{ github.repository_owner }}
           PAGES_REPO: ${{ github.event.repository.name }}
@@ -138,6 +151,7 @@ jobs:
           if-no-files-found: error
 
   publish:
+    if: github.event.inputs.snapshot != 'true'
     needs: build
     runs-on: ubuntu-latest
     environment:

@@ -59,7 +59,15 @@ internal static class Program
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
-        WebKit.Module.Initialize();
+        // KDE / Kinoite often exports GTK_MODULES=appmenu-gtk-module:colorreload-gtk-module.
+        // Those are Gtk3 modules. If they load into this Gtk4 process they register
+        // GdkDisplayManager first, then Gtk4 dies with:
+        //   cannot register existing type 'GdkDisplayManager'
+        // Unset before any Module.Initialize / gtk_init. We do not need them.
+        StripGtk3Modules();
+
+        // GirCore: initialize Gtk once, then dependents. WebKit.Module.Initialize
+        // already calls Gtk.Module.Initialize. Do not call Gtk again after WebKit.
         Gtk.Module.Initialize();
         try
         {
@@ -74,8 +82,25 @@ internal static class Program
             Console.Error.WriteLine($"adw init skipped: {ex.Message}");
         }
 
+        WebKit.Module.Initialize();
+
         var app = new CopilotApplication(options, profile);
         return app.Run(args);
+    }
+
+    private static void StripGtk3Modules()
+    {
+        foreach (var name in new[] { "GTK_MODULES", "GTK3_MODULES" })
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrEmpty(value))
+            {
+                continue;
+            }
+
+            Environment.SetEnvironmentVariable(name, null);
+            Console.Error.WriteLine($"{name} cleared ({value})");
+        }
     }
 }
 
