@@ -2,7 +2,7 @@
 
 **Unofficial** Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.com).
 
-Built with .NET 11, GTK4, and WebKitGTK, shipped via Flatpak.
+Built with the latest .NET 11 SDK, GTK4, and WebKitGTK, shipped via Flatpak.
 
 * .NET build: AOT, self-contained, speed-optimized build
 * GTK4 using [Gir.Core](https://github.com/gircore/gir.core)
@@ -35,7 +35,7 @@ The `.flatpakref` adds the project repo for updates to Flatpak, embeds the repo 
 
 ## Build with Podman
 
-Uses the project builder image (Azure Linux 4 + .NET 11 + Flatpak tooling).
+Uses the project builder image (Azure Linux 4 + latest .NET 11 SDK + Flatpak tooling).
 
 ```bash
 # once: build the local builder image (or: ./scripts/podman-build-local.sh --pull-ghcr)

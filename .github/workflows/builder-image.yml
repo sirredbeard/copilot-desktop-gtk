@@ -22,7 +22,7 @@ on:
       - ".github/workflows/builder-image.yml"
   workflow_dispatch:
   schedule:
-    # Pick up new .NET 11 preview SDKs and Flatpak runtimes weekly.
+    # Pick up new .NET 11 SDKs and Flatpak runtimes weekly.
     - cron: "17 6 * * 1"
 
 permissions:

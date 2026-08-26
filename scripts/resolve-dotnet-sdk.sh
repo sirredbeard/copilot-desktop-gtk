@@ -2,8 +2,9 @@
 # resolve-dotnet-sdk.sh
 #
 # Purpose: Resolve the latest .NET 11 SDK version from Microsoft release
-#   metadata (Microsoft release-metadata feed). Prints
-#   DOTNET_SDK_VERSION=... and the linux-x64 tarball URL.
+#   metadata (preview, RC, or GA as available). Prints KEY=value lines
+#   for DOTNET_SDK_VERSION, DOTNET_SDK_URL, DOTNET_CHANNEL, and
+#   DOTNET_INSTALL_METHOD (safe to tee into $GITHUB_OUTPUT).
 # Usage:   ./scripts/resolve-dotnet-sdk.sh [outfile]
 # Needs:   curl, python3
 # CI:      Yes.
