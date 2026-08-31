@@ -4,9 +4,9 @@ Maintainer and coding-agent norms. User-facing install docs stay in `README.md`.
 
 ## What this is
 
-Unofficial self-contained Native AOT .NET 11 GTK4/WebKit app for Microsoft Copilot on Linux x86_64. Display name is **Copilot** (not "Copilot Desktop"). Distribution is Flatpak from the GitHub Pages ostree repo (primary, with updates), plus single-file `.flatpak` and bare AOT binary on GitHub Releases.
+Unofficial self-contained Native AOT .NET 11 GTK4/WebKit app for Microsoft Copilot on Linux x86_64. Display name is Copilot, not "Copilot Desktop". Distribution is Flatpak from the GitHub Pages ostree repo (primary, with updates), plus single-file `.flatpak` and bare AOT binary on GitHub Releases.
 
-Not affiliated with Microsoft. Trademark and third-party notices live in `LICENSE`.
+Not affiliated with Microsoft. Trademark and third-party notices live in `NOTICE`. Icon source is `assets/icons/copilot.png`.
 
 ## Non-negotiable norms
 
@@ -19,9 +19,9 @@ Not affiliated with Microsoft. Trademark and third-party notices live in `LICENS
 7. **GNOME-first. Tray is not a product feature.** Default GNOME (Fedora, Azure Linux with GNOME, etc.) has no system tray. Do not design around tray, do not bundle AppIndicator, do not center docs on tray. Autostart opens a normal window. Soft-load tray only if a host already has StatusNotifier + library; otherwise normal window and close quits.
 8. **Login must persist.** `WebKit.NetworkSession` with on-disk cookies and website data under XDG. ITP off enough for MS SSO. Smoke tests may use ephemeral sessions.
 9. **Stay inside the WebView for first-party traffic.** `NewWindowAction` must not `Use()` without a create-web-view handler (WebKitGTK will open the default browser). Load allowed hosts in the same window. Allow `copilot.com` / `www.copilot.com` and related Microsoft hosts. Block true external navigations and create-web-view requests (no host browser open).
-10. **Writing style.** Docs, comments, commit messages, workflow comments: plain voice. No em-dashes, no decorative emoji, no marketing filler. Spaced hyphen " - " if you need a dash. Precision and brevity over polish.
+10. **Writing style.** Docs, comments, commit messages, workflow comments: plain voice. No em-dashes, no decorative emoji, no marketing filler. Spaced hyphen " - " if you need a dash. Precision and brevity over polish. Minimal formatting.
 11. **Git authoring.** Never add `Co-authored-by`, Copilot trailers, or π signatures. Iterative commits on `main` are fine.
-12. **README hygiene.** User-facing README stays short. Prefer plain lists over tables. Do not mention or compare to other third-party Copilot wrappers.
+12. **README hygiene.** User-facing README stays short. Prefer plain lists over tables. Do not mention or compare to other third-party Copilot wrappers. Maintainer GPG and Pages signing detail stays here and in `packaging/gpg/README.md`.
 13. **Cancel noise.** Aggressively cancel and delete failed/spurious workflow runs after diagnosis. Get logs, fix, commit, re-run.
 
 ## Architecture (short)

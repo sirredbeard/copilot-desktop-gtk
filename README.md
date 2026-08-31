@@ -1,22 +1,24 @@
 # Copilot
 
-**Unofficial** Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.com).
+<img src="assets/icons/copilot.png" width="128" alt="Copilot">
 
-Built with the latest .NET 11 SDK, GTK4, and WebKitGTK, shipped via Flatpak.
+Unofficial Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.com).
 
-* .NET build: AOT, self-contained, speed-optimized build
+Native AOT .NET 11, GTK4, WebKitGTK. Shipped as Flatpak.
+
+* .NET: AOT, self-contained, speed-optimized
 * GTK4 using [Gir.Core](https://github.com/gircore/gir.core)
-* Flatpak uses latest [GNOME 50 Runtime](https://docs.flatpak.org/en/latest/available-runtimes.html) with latest stable [WebKitGTK](https://webkitgtk.org/)
-* This repo is also a Flatpak repo that provides updates for this app, implemented using GitHub Pages, GPG-signed (I wrote a [guide](https://github.com/sirredbeard/github-pages-flatpak-repo) on how to do this)
-* Fully [automated builds](https://github.com/sirredbeard/copilot-desktop-gtk/blob/main/.github/workflows/release.yml) from GitHub Actions, built using an Azure Linux-based [build container](https://github.com/sirredbeard/copilot-desktop-gtk/blob/main/container/Dockerfile)
+* Flatpak on the latest [GNOME 50 Runtime](https://docs.flatpak.org/en/latest/available-runtimes.html) with [WebKitGTK](https://webkitgtk.org/)
+* This repo is also a GPG-signed Flatpak repo on GitHub Pages. I wrote a [guide](https://github.com/sirredbeard/github-pages-flatpak-repo) on how to do this.
+* [Automated builds](https://github.com/sirredbeard/copilot-desktop-gtk/blob/main/.github/workflows/release.yml) in GitHub Actions, from an Azure Linux [build container](https://github.com/sirredbeard/copilot-desktop-gtk/blob/main/container/Dockerfile)
 
-**This project is not affiliated with, sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks are trademarks of Microsoft.**
+This project is not affiliated with, sponsored, or endorsed by Microsoft. Microsoft, Copilot, and related marks are trademarks of Microsoft.
 
 <img width="1294" height="648" alt="01-desktop" src="https://github.com/user-attachments/assets/fdb38a9c-4a6d-4eaa-8d89-ec18fdb62dc5" />
 
 <img width="1291" height="932" alt="Screenshot From 2026-08-06 19-32-15" src="https://github.com/user-attachments/assets/205b59ad-61fe-46b7-9604-b53e3eb9259b" />
 
-## Install from GitHub
+## Install
 
 ```bash
 flatpak install --user --from \
@@ -24,43 +26,33 @@ flatpak install --user --from \
 flatpak run com.github.sirredbeard.copilot-desktop-gtk
 ```
 
-The `.flatpakref` adds the project repo for updates to Flatpak, embeds the repo signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when needed.
+The `.flatpakref` adds the project repo for updates, embeds the signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when needed.
 
-## Offline artifacts on GitHub Releases
+## Releases
 
-[Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) include:
+[Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also have:
 
-* A single-file `.flatpak` bundle for side-loading
-* A bare Native AOT binary (does not use GNOME runtime)
+* A single-file `.flatpak` bundle
+* A bare Native AOT binary (no GNOME runtime)
 
 ## Build with Podman
 
-Uses the project builder image (Azure Linux 4 + latest .NET 11 SDK + Flatpak tooling).
+Uses the project builder image (Azure Linux 4, latest .NET 11 SDK, Flatpak tooling).
 
 ```bash
-# once: build the local builder image (or: ./scripts/podman-build-local.sh --pull-ghcr)
 ./scripts/build-builder-image.sh
-
-# binary + icons + Flatpak + smoke (version from csproj unless you pass one)
 ./scripts/podman-build-local.sh
 ```
 
+Or `./scripts/podman-build-local.sh --pull-ghcr` to skip the local image build.
+
 Artifacts land under `dist/publish/` and `dist/flatpak/`.
 
-After a local Flatpak build you can stage a Pages-shaped tree with:
-
-```bash
-./scripts/stage-flatpak-pages.sh
-```
-
-GPG signing for a local Pages tree: set `GPG_PRIVATE_KEY` or
-`GPG_HOME`, run `./scripts/build-flatpak.sh` (signs every OSTree tip
-before static deltas), then stage. See
-[packaging/gpg/README.md](packaging/gpg/README.md).
+Stage a Pages-shaped tree with `./scripts/stage-flatpak-pages.sh`. Local GPG signing is in [packaging/gpg/README.md](packaging/gpg/README.md).
 
 ## Build without Podman
 
-Needs .NET 11 SDK, clang, gcc, and GTK4/WebKitGTK devel packages on the host.
+Needs .NET 11 SDK, clang, gcc, and GTK4/WebKitGTK devel on the host.
 
 ```bash
 ./scripts/build-app.sh
@@ -68,8 +60,7 @@ Needs .NET 11 SDK, clang, gcc, and GTK4/WebKitGTK devel packages on the host.
 ./dist/publish/copilot-desktop-gtk
 ```
 
-Flatpak on the host (needs `flatpak`, `flatpak-builder` or
-`org.flatpak.Builder`, and `org.gnome.Platform//50` + `org.gnome.Sdk//50`):
+Flatpak on the host needs `flatpak`, `flatpak-builder` or `org.flatpak.Builder`, plus `org.gnome.Platform//50` and `org.gnome.Sdk//50`:
 
 ```bash
 ./scripts/build-icons.sh
