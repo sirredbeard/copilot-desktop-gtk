@@ -5,13 +5,19 @@ namespace CopilotDesktopGtk;
 /// <summary>
 /// Optional StatusNotifier tray via host libayatana-appindicator3 (soft DllImport).
 ///
-/// Stock GNOME has no tray host. We only construct this when a StatusNotifier
-/// watcher is on the session bus AND the host library loads. Otherwise the app
-/// is a normal window (close quits, header menu has Quit). Not bundled in Flatpak.
+/// Off by default. Ayatana is a Gtk3 library and this process runs Gtk4, so
+/// loading it breaks the Gtk4 display. See TryCreate. Set COPILOT_TRAY_AYATANA=1
+/// to try it anyway on a host that has the library.
+///
+/// Stock GNOME has no tray host. We only construct this when the opt-in is set,
+/// a StatusNotifier watcher is on the session bus, AND the host library loads.
+/// Otherwise the app is a normal window (close quits, header menu has Quit).
+/// Not bundled in Flatpak.
 /// </summary>
 internal sealed class TrayIcon : IDisposable
 {
     private const string Lib = "libayatana-appindicator3.so.1";
+    private const string OptInVariable = "COPILOT_TRAY_AYATANA";
 
     private readonly IntPtr _indicator;
     private readonly IntPtr _menu;
@@ -48,6 +54,24 @@ internal sealed class TrayIcon : IDisposable
         Action<bool> onAutostartChanged,
         bool autostartEnabled)
     {
+        // libayatana-appindicator3.so.1 has a DT_NEEDED entry for libgtk-3.so.0,
+        // and Program.Main has already run Gtk4 init. Two Gtk versions in one
+        // process cannot share the GdkDisplayManager type. The second one to
+        // register fails and the Gtk4 window never appears:
+        //   cannot register existing type 'GdkDisplayManager'
+        // So the Gtk3 path stays off unless the user asks for it. Issue #3.
+        if (Environment.GetEnvironmentVariable(OptInVariable) != "1")
+        {
+            return null;
+        }
+
+        // Probe the library before any native call. A missing library must not
+        // pull libgtk-3 into this process through a failed DllImport.
+        if (!NativeLibrary.TryLoad(Lib, out _))
+        {
+            return null;
+        }
+
         try
         {
             // Ensure GTK is up; appindicator menus are Gtk3 menus historically.
