@@ -175,10 +175,14 @@ internal sealed class MainWindow : IDisposable
         s.DefaultMonospaceFontSize = 13;
         s.MinimumFontSize = 0;
 
-        // Edge-on-Windows UA: MSA treats this as a fully supported desktop browser
-        // for KMSI. Linux Chrome UA alone still left Yes grayed on WebKitGTK.
+        // Accurate platform token (X11; Linux x86_64), Chromium/Edge family kept for
+        // MS UA-family detection. A spoofed Windows platform previously fixed the MSA
+        // KMSI "Stay signed in?" Yes button, but a Windows claim from a Linux engine
+        // is exactly the kind of fingerprint mismatch bot-detection (e.g. Cloudflare
+        // Turnstile) flags. If KMSI regresses, that needs its own targeted fix rather
+        // than reintroducing an inaccurate OS claim here.
         s.UserAgent =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
             "Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
         return s;
     }
@@ -721,13 +725,13 @@ internal sealed class MainWindow : IDisposable
               var uad = {
                 brands: brands,
                 mobile: false,
-                platform: 'Windows',
+                platform: 'Linux',
                 getHighEntropyValues: function () {
                   return Promise.resolve({
                     brands: brands,
                     mobile: false,
-                    platform: 'Windows',
-                    platformVersion: '15.0.0',
+                    platform: 'Linux',
+                    platformVersion: '6.8.0',
                     architecture: 'x86',
                     bitness: '64',
                     model: '',
@@ -735,7 +739,7 @@ internal sealed class MainWindow : IDisposable
                     fullVersionList: brands
                   });
                 },
-                toJSON: function () { return { brands: brands, mobile: false, platform: 'Windows' }; }
+                toJSON: function () { return { brands: brands, mobile: false, platform: 'Linux' }; }
               };
               try {
                 Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: function () { return uad; } });

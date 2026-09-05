@@ -59,6 +59,8 @@ internal static class AppConstants
         "www.office.com",
         "outlook.office.com",
         "outlook.live.com",
+        // Bot-check challenge frame Copilot invokes on some requests (e.g. file upload)
+        "challenges.cloudflare.com",
     };
 
     public static bool IsAllowedHost(string? host)
