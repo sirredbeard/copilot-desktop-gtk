@@ -33,6 +33,12 @@ if [[ ! -x "${ROOT}/dist/publish/copilot-desktop-gtk" ]]; then
     exit 1
 fi
 
+if [[ ! -d "${ROOT}/dist/webkit-dnd-overlay" ]]; then
+    echo "error: missing dist/webkit-dnd-overlay - run stage-webkit-dnd-overlay.sh first" >&2
+    echo "       (see packaging/webkit-dnd/README.md)" >&2
+    exit 1
+fi
+
 flatpak_builder() {
     if command -v flatpak-builder >/dev/null 2>&1; then
         flatpak-builder "$@"

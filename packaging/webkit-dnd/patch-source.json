@@ -1,0 +1,7 @@
+{
+  "_comment": "The out-of-tree WebKitGTK drag-and-drop file-access overlay is built from upstream WebKit's own main branch with our fork's fix commit cherry-picked on top - not backported onto whatever older WebKitGTK release org.gnome.Platform//50 happens to pin. The fix was authored against a recent trunk state, so cherry-picking it onto current upstream main is close to conflict-free by construction; rebasing it onto a stable release tag that can be thousands of commits behind trunk is not, and would require manual conflict resolution on every drift. Nothing here is a fixed commit or a committed patch file - scripts/fetch-webkit-dnd-patch.sh resolves fork_branch and upstream_repo's upstream_ref to their current HEADs fresh on every run. A push to either moving target is picked up on the next release without editing this file.",
+  "fork_repo": "sirredbeard/WebKit",
+  "fork_branch": "gtk-dnd-file-access-reenable",
+  "upstream_repo": "WebKit/WebKit",
+  "upstream_ref": "main"
+}

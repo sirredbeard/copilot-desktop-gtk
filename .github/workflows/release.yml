@@ -26,7 +26,16 @@ env:
   APP_ID: com.github.sirredbeard.copilot-desktop-gtk
 
 jobs:
+  # Rebuilds the out-of-tree WebKitGTK drag-and-drop overlay (issue #2),
+  # built from upstream WebKit main with our fork's fix cherry-picked on
+  # top, only if upstream main or the fork branch moved since the last
+  # cached build; otherwise this resolves in seconds via cache hit.
+  webkit-dnd:
+    uses: ./.github/workflows/webkit-dnd-rebuild.yml
+    secrets: inherit
+
   build:
+    needs: webkit-dnd
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/sirredbeard/copilot-desktop-gtk-builder:latest
@@ -70,6 +79,13 @@ jobs:
             echo "error: release v$V already exists" >&2
             exit 1
           fi
+
+      - name: Restore WebKit DND overlay artifact
+        uses: actions/cache/restore@v4
+        with:
+          path: dist/webkit-dnd-overlay
+          key: ${{ needs.webkit-dnd.outputs.overlay_cache_key }}
+          fail-on-cache-miss: true
 
       - name: Stamp version into sources
         run: ./scripts/stamp-version.sh "${{ steps.ver.outputs.version }}"
