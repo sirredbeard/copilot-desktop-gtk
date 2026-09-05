@@ -202,6 +202,7 @@ internal sealed class CliOptions
               COPILOT_LOW_MEMORY=1
               COPILOT_HARDWARE_ACCELERATION=always|never|auto
               COPILOT_WEBKIT_DEBUG=1
+              COPILOT_TRAY_AYATANA=1
               COPILOT_DISABLE_COMPOSITING=1
               WEBKIT_DISABLE_COMPOSITING_MODE=1
 
@@ -209,6 +210,8 @@ internal sealed class CliOptions
               Default GNOME has no system tray. The app is a normal window there:
               close quits, autostart opens a window. --tray / close-to-tray only
               matter if the host actually exposes a StatusNotifier tray.
+              The Ayatana tray is Gtk3 and off by default: loading it into this
+              Gtk4 process kills the window. COPILOT_TRAY_AYATANA=1 opts back in.
               On Wayland, bind a desktop shortcut to
               `copilot-desktop-gtk --toggle-windows` for reliable show/hide.
               Auto low-memory turns on when MemTotal is at most 6 GiB or
