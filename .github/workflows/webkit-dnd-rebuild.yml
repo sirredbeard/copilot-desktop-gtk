@@ -1,0 +1,141 @@
+# webkit-dnd-rebuild: check both moving targets behind the drag-and-drop
+# WebKitGTK overlay (issue #2) - upstream WebKit/WebKit's own main branch
+# HEAD, and the current HEAD of our WebKit fork's fix branch - and only
+# if either one changed since our last cached build, rebuild the
+# bare-minimum patched overlay (built from upstream main with our fix
+# cherry-picked on top, not backported onto GNOME's older pinned
+# WebKitGTK release) on the self-hosted Azure VM runner. Designed to be
+# called from release.yml so a normal release almost always just reuses
+# a cached artifact - the VM only spins up when upstream WebKit moved, or
+# a new commit landed on the fork branch (e.g. addressing upstream
+# review).
+name: webkit-dnd-rebuild
+
+on:
+  workflow_call:
+    outputs:
+      overlay_cache_key:
+        description: Cache key the built (or reused) overlay artifact is stored under.
+        value: ${{ jobs.check-version.outputs.cache_key }}
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      cache_key: ${{ steps.ver.outputs.cache_key }}
+      cache_hit: ${{ steps.restore.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read upstream WebKit main + fork branch state
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Both moving targets are resolved fresh here, not read from any
+          # pinned/committed value: upstream WebKit/WebKit's own main
+          # branch HEAD, and our fork's fix branch HEAD. Either one
+          # changing produces a new cache key.
+          eval "$(./scripts/fetch-webkit-dnd-patch.sh --sha-only)"
+          key="webkit-dnd-${fork_head_sha:0:12}-${upstream_main_sha:0:12}"
+          echo "cache_key=${key}" >> "$GITHUB_OUTPUT"
+          echo "resolved cache key: ${key}"
+
+      # Cache existence alone tells us whether a rebuild is necessary - no
+      # separate tracked "last built version" file to keep in sync by hand.
+      - name: Check for a cached overlay artifact
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: dist/webkit-dnd-overlay
+          key: ${{ steps.ver.outputs.cache_key }}
+          lookup-only: true
+
+  start-vm:
+    needs: check-version
+    if: needs.check-version.outputs.cache_hit != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      # OIDC login: no static Azure secret to leak. The service principal
+      # (webkit-dnd-gha-runner-control) is scoped to just rg-webkit-dnd
+      # (Virtual Machine Contributor), federated to this repo's main branch.
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start azure-webkit-dnd-d16
+        run: |
+          set -euo pipefail
+          az vm start -g rg-webkit-dnd -n azure-webkit-dnd-d16
+          # Self-hosted runner service on the VM registers itself once the
+          # VM is up; give it a moment before the next job tries to claim it.
+          sleep 60
+
+  rebuild-webkit:
+    needs: [check-version, start-vm]
+    if: needs.check-version.outputs.cache_hit != 'true'
+    runs-on: [self-hosted, webkit-dnd]
+    container:
+      image: ghcr.io/sirredbeard/webkitgtk-dnd-fix-builder:latest
+      credentials:
+        username: sirredbeard
+        password: ${{ secrets.PKG_PAT }}
+      # Bind-mount the same host NVMe cache path the WebKitGTK-DND-Fix
+      # runner on this VM already uses (/var/cache/webkit-dnd). ccache and
+      # our own persistent source+build tree (see build-patched-webkit.sh)
+      # live here, so both self-hosted runners on this VM share as much
+      # compiled state as their two builds have in common - a first
+      # Fedora-43 build is a long tail, but every rebuild after that reuses
+      # the shared cache instead of starting cold. Also bind-mount (read
+      # only) the pre-seeded org.gnome.Sdk//50 install this VM already
+      # keeps for the app's own Flatpak build (see
+      # .github/copilot-instructions.md) - build-patched-webkit.sh links
+      # WebKit against that Sdk's own libxml2 instead of bundling a
+      # private copy.
+      options: --privileged -v /var/cache/webkit-dnd:/var/cache/webkit-dnd -v /var/lib/flatpak-builder-user:/var/lib/flatpak-builder-user:ro
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build patched WebKitGTK (bare minimum)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ./scripts/build-patched-webkit.sh
+          ./scripts/stage-webkit-dnd-overlay.sh
+
+      - name: Save overlay artifact to cache
+        uses: actions/cache/save@v4
+        with:
+          path: dist/webkit-dnd-overlay
+          key: ${{ needs.check-version.outputs.cache_key }}
+
+  stop-vm:
+    needs: [check-version, start-vm, rebuild-webkit]
+    if: always() && needs.check-version.outputs.cache_hit != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deallocate azure-webkit-dnd-d16
+        run: az vm deallocate -g rg-webkit-dnd -n azure-webkit-dnd-d16 --no-wait

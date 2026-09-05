@@ -101,3 +101,26 @@ modules:
       - type: dir
         path: ../../dist/icons
         dest: icons
+
+  # Out-of-tree WebKitGTK drag-and-drop / file-access patch (issue #2),
+  # bundled Canary-style: private copies of just the WebKit shared libs +
+  # helper processes live under /app, the runtime (org.gnome.Platform//50)
+  # is untouched and unforked. dist/webkit-dnd-overlay/ is populated by
+  # scripts/build-patched-webkit.sh + scripts/stage-webkit-dnd-overlay.sh
+  # before flatpak-builder runs; see packaging/webkit-dnd/README.md.
+  # Libraries install flat to /app/lib (not /app/lib/x86_64-linux-gnu):
+  # /etc/ld.so.conf only auto-scans bare /app/lib for an app's own
+  # commit, so a multiarch-triplet subdir there is invisible to ldconfig
+  # and the app silently keeps resolving the runtime's own WebKitGTK.
+  - name: webkit-dnd-overlay
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib /app/libexec/webkitgtk-6.0
+      - cp -a lib/. /app/lib/
+      - cp -a libexec/webkitgtk-6.0/. /app/libexec/webkitgtk-6.0/
+      - chmod +x /app/libexec/webkitgtk-6.0/WebKitWebProcess
+        /app/libexec/webkitgtk-6.0/WebKitNetworkProcess
+        /app/libexec/webkitgtk-6.0/WebKitGPUProcess
+    sources:
+      - type: dir
+        path: ../../dist/webkit-dnd-overlay
