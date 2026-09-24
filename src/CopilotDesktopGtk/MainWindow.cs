@@ -15,6 +15,7 @@ internal sealed class MainWindow : IDisposable
     private readonly Gtk.ApplicationWindow _window;
     private readonly WebKit.WebView _webView;
     private readonly WebKit.Settings _webSettings;
+    private readonly List<Gtk.ApplicationWindow> _popupWindows = [];
     private bool _closeToTray;
     private bool _hasSuccessfulLoad;
     private bool _offlineBannerVisible;
@@ -297,6 +298,11 @@ internal sealed class MainWindow : IDisposable
             // "WebProcess didn't exit as expected" after force-quit under OOM).
             try { _webView.StopLoading(); } catch { /* ignore */ }
             try { _webView.LoadUri("about:blank"); } catch { /* ignore */ }
+            foreach (var popupWindow in _popupWindows.ToArray())
+            {
+                try { popupWindow.Destroy(); } catch { /* ignore */ }
+            }
+            _popupWindows.Clear();
             _window.Destroy();
         }
         catch
@@ -351,38 +357,33 @@ internal sealed class MainWindow : IDisposable
     private void WireWebViewSignals()
     {
         // window.open / target=_blank: WebKit emits create-web-view. If nobody
-        // returns a WebView and NEW_WINDOW_ACTION is allowed, the URI is handed
-        // to the host default browser. Always keep first-party traffic here.
+        // returns a WebView, the popup is denied. First-party authentication
+        // gets a real related WebView in its own GTK window so window.opener
+        // remains connected to the Copilot page.
         _webView.OnCreate += (sender, signalArgs) =>
         {
             try
             {
                 var uri = signalArgs.NavigationAction?.GetRequest()?.GetUri() ?? string.Empty;
                 Console.WriteLine($"create-web-view: {uri}");
-                if (string.IsNullOrEmpty(uri) ||
-                    uri.StartsWith("about:", StringComparison.Ordinal) ||
-                    uri.StartsWith("blob:", StringComparison.Ordinal) ||
-                    uri.StartsWith("data:", StringComparison.Ordinal))
+                if (!string.IsNullOrEmpty(uri) &&
+                    !uri.StartsWith("about:", StringComparison.Ordinal) &&
+                    !uri.StartsWith("blob:", StringComparison.Ordinal) &&
+                    !uri.StartsWith("data:", StringComparison.Ordinal) &&
+                    !IsPopupRequestAllowed(uri))
                 {
-                    // Related blank window (then navigates) - reuse this view.
-                    return _webView;
+                    // Keep ordinary external product hops controlled while
+                    // allowing OAuth authorize URLs and explicit popup mode.
+                    Console.WriteLine($"blocked popup (create): {uri}");
+                    return null!;
                 }
 
-                if (IsInternalUri(uri))
-                {
-                    LoadInPlace(uri);
-                    return _webView;
-                }
-
-                // True external: stay in-app. Never hand URIs to the host browser
-                // (launch spam like copilot.fun). Drop the popup.
-                Console.WriteLine($"blocked external (create): {uri}");
-                return null!;
+                return CreatePopupWebView(_webView);
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"create-web-view: {ex.Message}");
-                return _webView;
+                return null!;
             }
         };
 
@@ -404,7 +405,6 @@ internal sealed class MainWindow : IDisposable
 
             var uri = nav.GetNavigationAction()?.GetRequest()?.GetUri() ?? string.Empty;
             var isNewWindow = type == WebKit.PolicyDecisionType.NewWindowAction;
-
             if (uri.StartsWith("about:", StringComparison.Ordinal) ||
                 uri.StartsWith("copilot-desktop-gtk:", StringComparison.Ordinal) ||
                 uri.StartsWith("data:", StringComparison.Ordinal) ||
@@ -414,8 +414,9 @@ internal sealed class MainWindow : IDisposable
                 return true;
             }
 
-            // Never Use() a NEW_WINDOW_ACTION without owning create-web-view.
-            // Ignore + load in place for first-party; xdg-open only for outsiders.
+            // If create-web-view returned a related child, let WebKit dispatch
+            // the navigation to that child. Loading it in the parent destroys
+            // the window.opener relationship required by OAuth callbacks.
             HandleNavigationPolicy(uri, decision, isNewWindow);
             return true;
         };
@@ -610,24 +611,8 @@ internal sealed class MainWindow : IDisposable
                 } catch (e) {}
               }
             };
-            // Keep window.open in this WebView for product hops. Do not rewrite
-            // window.open on Microsoft login hosts - KMSI and federated login
-            // break when open() is replaced with location.assign.
-            (function () {
-              try {
-                var host = (location && location.hostname) ? location.hostname : '';
-                var loginHost = /(^|\.)(login\.live\.com|login\.microsoftonline\.com|login\.microsoft\.com|account\.live\.com|account\.microsoft\.com|aadcdn\.ms(auth|ftauth)\.net)$/i.test(host);
-                if (loginHost) return;
-                var nativeOpen = window.open;
-                window.open = function (url, name, specs) {
-                  if (url) {
-                    try { window.location.assign(url); } catch (e) { window.location.href = url; }
-                    return window;
-                  }
-                  try { return nativeOpen ? nativeOpen.call(window, url, name, specs) : window; } catch (e) { return window; }
-                };
-              } catch (e) {}
-            })();
+            // Keep window.open native. The host creates a related WebView for
+            // first-party/auth popups so window.opener remains connected.
             """;
 
         ucm.AddScript(WebKit.UserScript.New(
@@ -922,7 +907,10 @@ internal sealed class MainWindow : IDisposable
         }
     }
 
-    private void HandleNavigationPolicy(string uri, WebKit.PolicyDecision decision, bool isNewWindow)
+    private void HandleNavigationPolicy(
+        string uri,
+        WebKit.PolicyDecision decision,
+        bool isNewWindow)
     {
         if (!AppConstants.IsHttpUrl(uri, out var parsed) || parsed is null)
         {
@@ -930,16 +918,9 @@ internal sealed class MainWindow : IDisposable
             return;
         }
 
-        if (IsInternalUri(uri))
+        if ((isNewWindow && IsPopupRequestAllowed(uri)) ||
+            (!isNewWindow && IsInternalUri(uri)))
         {
-            if (isNewWindow)
-            {
-                // Deny the popup; navigate this window instead.
-                decision.Ignore();
-                LoadInPlace(uri);
-                return;
-            }
-
             decision.Use();
             return;
         }
@@ -949,6 +930,83 @@ internal sealed class MainWindow : IDisposable
         // browser window on every launch.
         Console.WriteLine($"blocked external: {uri}");
         decision.Ignore();
+    }
+
+    private WebKit.WebView CreatePopupWebView(WebKit.WebView relatedView)
+    {
+        var popupWebView = _session.CreateRelatedWebView(relatedView);
+        popupWebView.SetZoomLevel(_zoom);
+
+        var popupWindow = Gtk.ApplicationWindow.New(_app);
+        popupWindow.Title = "Copilot authentication";
+        popupWindow.SetDefaultSize(760, 720);
+        popupWindow.Resizable = true;
+        popupWindow.HideOnClose = false;
+
+        try
+        {
+            popupWindow.SetIconName("copilot-desktop-gtk");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"popup icon skipped: {ex.Message}");
+        }
+
+        _popupWindows.Add(popupWindow);
+        popupWindow.OnCloseRequest += (_, _) =>
+        {
+            _popupWindows.Remove(popupWindow);
+            return false;
+        };
+
+        // OAuth providers commonly call window.close() after redirecting the
+        // authorization result to the parent page.
+        popupWebView.OnClose += (_, _) =>
+        {
+            try { popupWindow.Destroy(); } catch { /* already closed */ }
+        };
+
+        // Support an additional auth popup without collapsing it into the
+        // current one.
+        popupWebView.OnCreate += (_, _) => CreatePopupWebView(popupWebView);
+        popupWebView.OnDecidePolicy += (_, signalArgs) =>
+        {
+            var decision = signalArgs.Decision;
+            var type = signalArgs.DecisionType;
+            if (type != WebKit.PolicyDecisionType.NewWindowAction &&
+                type != WebKit.PolicyDecisionType.NavigationAction)
+            {
+                return false;
+            }
+
+            if (decision is not WebKit.NavigationPolicyDecision nav)
+            {
+                return false;
+            }
+
+            var uri = nav.GetNavigationAction()?.GetRequest()?.GetUri() ?? string.Empty;
+            if (uri.StartsWith("about:", StringComparison.Ordinal) ||
+                uri.StartsWith("data:", StringComparison.Ordinal) ||
+                uri.StartsWith("blob:", StringComparison.Ordinal))
+            {
+                decision.Use();
+                return true;
+            }
+
+            if (AppConstants.IsHttpUrl(uri, out var popupUri) && popupUri is not null)
+            {
+                decision.Use();
+                return true;
+            }
+
+            Console.WriteLine($"blocked external popup navigation: {uri}");
+            decision.Ignore();
+            return true;
+        };
+
+        popupWindow.SetChild(popupWebView);
+        popupWindow.Present();
+        return popupWebView;
     }
 
     private static bool IsInternalUri(string uri)
@@ -962,18 +1020,30 @@ internal sealed class MainWindow : IDisposable
                LoginLogic.IsFederatedIdentityProviderLogin(uri);
     }
 
-    private void LoadInPlace(string uri)
+    private bool IsPopupRequestAllowed(string uri)
     {
-        if (string.IsNullOrEmpty(uri))
+        return _options.AllowPopups ||
+               IsOAuthAuthorizationUri(uri);
+    }
+
+    private static bool IsOAuthAuthorizationUri(string uri)
+    {
+        if (!AppConstants.IsHttpUrl(uri, out var parsed) || parsed is null)
         {
-            return;
+            return false;
         }
 
-        var current = _webView.GetUri() ?? string.Empty;
-        if (!string.Equals(current, uri, StringComparison.Ordinal))
+        var path = parsed.AbsolutePath.TrimEnd('/');
+        if (path.EndsWith("/oauth/authorize", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/authorize", StringComparison.OrdinalIgnoreCase))
         {
-            _webView.LoadUri(uri);
+            return true;
         }
+
+        var query = parsed.Query;
+        return query.Contains("client_id=", StringComparison.OrdinalIgnoreCase) &&
+               query.Contains("redirect_uri=", StringComparison.OrdinalIgnoreCase) &&
+               query.Contains("response_type=", StringComparison.OrdinalIgnoreCase);
     }
 
     private void WireDownloadHandling()

@@ -47,7 +47,7 @@ internal sealed class CopilotApplication
             var a = args[i];
             if (a is "--tray" or "--daemon" or "--toggle-windows" or "--toggle"
                 or "--smoke-test" or "--help" or "-h" or "--version" or "-V"
-                or "--low-memory" or "--webkit-debug")
+                or "--low-memory" or "--webkit-debug" or "--allow-popups")
             {
                 continue;
             }

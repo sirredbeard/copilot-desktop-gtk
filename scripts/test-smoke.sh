@@ -25,6 +25,7 @@ if command -v ldd >/dev/null 2>&1; then
 fi
 
 run_smoke() {
+    python3 "${ROOT}/scripts/test-popup-auth.py"
     "$BIN" --version
     "$BIN" --help >/dev/null
     # Smoke-test may fail without a display; treat display-less link/help as

@@ -81,6 +81,21 @@ internal sealed class WebKitSession : IDisposable
         return view;
     }
 
+    /// <summary>
+    /// Build a child WebView related to an existing view. WebKit uses the
+    /// relationship for window.opener and shared web-process state, which is
+    /// required by OAuth pages that return to the parent after authorization.
+    /// </summary>
+    public WebKit.WebView CreateRelatedWebView(WebKit.WebView relatedView)
+    {
+        return WebKit.WebView.NewWithProperties(
+        [
+            new GObject.ConstructArgument(
+                "related-view",
+                new GObject.Value(relatedView)),
+        ]);
+    }
+
     public void Dispose()
     {
         if (_disposed)
