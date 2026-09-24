@@ -970,6 +970,16 @@ internal sealed class MainWindow : IDisposable
         // authorization result to the parent page.
         popupWebView.OnClose += (_, _) =>
         {
+            var currentUri = popupWebView.GetUri() ?? string.Empty;
+            if (admittedAuthFlow && !IsOAuthCallbackUri(currentUri))
+            {
+                // Some providers close an intermediate handoff window before
+                // the real authorization callback has completed. Keep the
+                // related view alive so the flow can continue.
+                Console.WriteLine($"ignored premature popup close: {currentUri}");
+                return;
+            }
+
             try { popupWindow.Destroy(); } catch { /* already closed */ }
         };
 
@@ -1078,6 +1088,19 @@ internal sealed class MainWindow : IDisposable
         return query.Contains("client_id=", StringComparison.OrdinalIgnoreCase) &&
                query.Contains("redirect_uri=", StringComparison.OrdinalIgnoreCase) &&
                query.Contains("response_type=", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOAuthCallbackUri(string uri)
+    {
+        if (!AppConstants.IsHttpUrl(uri, out var parsed) || parsed is null)
+        {
+            return false;
+        }
+
+        var query = parsed.Query;
+        return query.Contains("code=", StringComparison.OrdinalIgnoreCase) ||
+               query.Contains("error=", StringComparison.OrdinalIgnoreCase) ||
+               parsed.AbsolutePath.Contains("callback", StringComparison.OrdinalIgnoreCase);
     }
 
     private void WireDownloadHandling()
