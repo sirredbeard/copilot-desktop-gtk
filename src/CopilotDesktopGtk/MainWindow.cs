@@ -378,7 +378,10 @@ internal sealed class MainWindow : IDisposable
                     return null!;
                 }
 
-                return CreatePopupWebView(_webView);
+                return CreatePopupWebView(
+                    _webView,
+                    allowAllPopups: _options.AllowPopups,
+                    authFlow: IsOAuthAuthorizationUri(uri));
             }
             catch (Exception ex)
             {
@@ -932,10 +935,14 @@ internal sealed class MainWindow : IDisposable
         decision.Ignore();
     }
 
-    private WebKit.WebView CreatePopupWebView(WebKit.WebView relatedView)
+    private WebKit.WebView CreatePopupWebView(
+        WebKit.WebView relatedView,
+        bool allowAllPopups,
+        bool authFlow)
     {
         var popupWebView = _session.CreateRelatedWebView(relatedView);
         popupWebView.SetZoomLevel(_zoom);
+        var admittedAuthFlow = authFlow;
 
         var popupWindow = Gtk.ApplicationWindow.New(_app);
         popupWindow.Title = "Copilot authentication";
@@ -968,7 +975,22 @@ internal sealed class MainWindow : IDisposable
 
         // Support an additional auth popup without collapsing it into the
         // current one.
-        popupWebView.OnCreate += (_, _) => CreatePopupWebView(popupWebView);
+        popupWebView.OnCreate += (_, signalArgs) =>
+        {
+            var uri = signalArgs.NavigationAction?.GetRequest()?.GetUri() ?? string.Empty;
+            var blank = string.IsNullOrEmpty(uri) ||
+                        uri.StartsWith("about:", StringComparison.Ordinal) ||
+                        uri.StartsWith("blob:", StringComparison.Ordinal) ||
+                        uri.StartsWith("data:", StringComparison.Ordinal);
+            var childAuthFlow = admittedAuthFlow || IsOAuthAuthorizationUri(uri);
+            if (!blank && !allowAllPopups && !childAuthFlow)
+            {
+                Console.WriteLine($"blocked popup child (create): {uri}");
+                return null!;
+            }
+
+            return CreatePopupWebView(popupWebView, allowAllPopups, childAuthFlow);
+        };
         popupWebView.OnDecidePolicy += (_, signalArgs) =>
         {
             var decision = signalArgs.Decision;
@@ -995,6 +1017,18 @@ internal sealed class MainWindow : IDisposable
 
             if (AppConstants.IsHttpUrl(uri, out var popupUri) && popupUri is not null)
             {
+                if (!allowAllPopups && !admittedAuthFlow && !IsOAuthAuthorizationUri(uri))
+                {
+                    Console.WriteLine($"blocked popup navigation: {uri}");
+                    decision.Ignore();
+                    return true;
+                }
+
+                if (IsOAuthAuthorizationUri(uri))
+                {
+                    admittedAuthFlow = true;
+                }
+
                 decision.Use();
                 return true;
             }

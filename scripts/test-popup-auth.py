@@ -30,7 +30,8 @@ def main() -> int:
     if "window.open = function" in main_text:
         raise SystemExit("popup-auth: window.open is still rewritten in-page")
 
-    require(main_text, "return CreatePopupWebView(_webView);", MAIN)
+    require(main_text, "return CreatePopupWebView(", MAIN)
+    require(main_text, "allowAllPopups: _options.AllowPopups", MAIN)
     require(main_text, "private WebKit.WebView CreatePopupWebView", MAIN)
     require(main_text, "popupWebView.OnClose", MAIN)
     require(main_text, "popupWindow.OnCloseRequest", MAIN)
@@ -38,6 +39,8 @@ def main() -> int:
     require(main_text, "IsPopupRequestAllowed", MAIN)
     require(main_text, "IsOAuthAuthorizationUri", MAIN)
     require(main_text, "AllowPopups", MAIN)
+    require(main_text, "admittedAuthFlow", MAIN)
+    require(main_text, "allowAllPopups", MAIN)
     require(main_text, "(!isNewWindow && IsInternalUri(uri))", MAIN)
     require(program_text, "COPILOT_ALLOW_POPUPS", PROGRAM)
     require(program_text, "--allow-popups", PROGRAM)
