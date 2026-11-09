@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # build-app.sh
 #
-# Purpose: Publish the Native AOT, trimmed linux-x64 binary.
+# Purpose: Publish the Native AOT, trimmed binary for the target arch.
 # Usage:   ./scripts/build-app.sh [Release|Debug]
+#   Target arch comes from resolve-arch.sh: $COPILOT_ARCH if set, else
+#   the host. Native AOT links with the host clang, so build each arch
+#   on a machine (or builder image) of that arch: x86_64 gives
+#   linux-x64, aarch64 gives linux-arm64.
 # Needs:   dotnet 11 SDK, clang, gtk4/webkitgtk devel libs
 # CI:      Yes.
 
@@ -10,7 +14,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${1:-Release}"
-RID="linux-x64"
+eval "$("${ROOT}/scripts/resolve-arch.sh" /dev/stdout | grep -E '^(COPILOT_ARCH|DOTNET_RID)=')"
+RID="$DOTNET_RID"
 PROJ="${ROOT}/src/CopilotDesktopGtk/CopilotDesktopGtk.csproj"
 OUT="${ROOT}/dist/publish"
 
