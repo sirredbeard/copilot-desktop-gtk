@@ -14,12 +14,19 @@ TAG="${1:-localhost/copilot-desktop-gtk-builder:latest}"
 
 # shellcheck disable=SC1090,SC1091
 source <("${ROOT}/scripts/resolve-dotnet-sdk.sh" /dev/stdout | sed 's/^/export /')
+# Host arch, in Docker spelling (amd64 or arm64). A local build builds
+# the host arch; CI builds each arch on a runner of that arch and joins
+# the two into one multi-arch manifest (builder-image.yml).
+# shellcheck disable=SC1090,SC1091
+source <("${ROOT}/scripts/resolve-arch.sh" /dev/stdout | sed 's/^/export /')
 
-echo "building $TAG with DOTNET_SDK_VERSION=${DOTNET_SDK_VERSION}"
+echo "building $TAG with DOTNET_SDK_VERSION=${DOTNET_SDK_VERSION} for ${DOCKER_ARCH}"
 
 podman build \
     -t "$TAG" \
     -f "${ROOT}/container/Dockerfile" \
+    --platform "linux/${DOCKER_ARCH}" \
+    --build-arg "TARGETARCH=${DOCKER_ARCH}" \
     --build-arg "DOTNET_SDK_VERSION=${DOTNET_SDK_VERSION}" \
     "${ROOT}"
 

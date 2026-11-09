@@ -1,7 +1,13 @@
-# Build and push the copilot-desktop-gtk-builder image to GHCR.
-# Local testing uses podman (scripts/build-builder-image.sh).
+# Build and push the copilot-desktop-gtk-builder image to GHCR, for both
+# arches. Each arch builds on a runner of that arch (no QEMU: the seed
+# step runs Flatpak inside the image, and Native AOT linking wants a
+# native toolchain). The per-arch images push as latest-<arch> and
+# YYYY.MM.DD-<arch>; a manifest job then joins them into the plain
+# latest and YYYY.MM.DD tags, so consumers keep pulling one name and
+# get their arch. Local testing uses podman (scripts/build-builder-image.sh).
 #
-# Image tags: latest + YYYY.MM.DD (UTC build date). No sha/dotnet/commit tags.
+# Image tags: latest + YYYY.MM.DD (UTC build date), each a multi-arch
+# manifest over x86_64 and aarch64. No sha/dotnet/commit tags.
 name: builder-image
 
 on:
@@ -10,6 +16,7 @@ on:
     paths:
       - "container/**"
       - "scripts/resolve-dotnet-sdk.sh"
+      - "scripts/resolve-arch.sh"
       - "scripts/build-builder-image.sh"
       - "scripts/seed-flatpak-runtimes.sh"
       - ".github/workflows/builder-image.yml"
@@ -17,6 +24,7 @@ on:
     paths:
       - "container/**"
       - "scripts/resolve-dotnet-sdk.sh"
+      - "scripts/resolve-arch.sh"
       - "scripts/build-builder-image.sh"
       - "scripts/seed-flatpak-runtimes.sh"
       - ".github/workflows/builder-image.yml"
@@ -34,8 +42,39 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-and-push:
+  # One date tag for the whole run, computed once so the two arch legs
+  # and the manifest job agree even if a leg straddles midnight UTC.
+  meta:
     runs-on: ubuntu-latest
+    outputs:
+      date_tag: ${{ steps.ver.outputs.date_tag }}
+      image: ${{ steps.ver.outputs.image }}
+    steps:
+      - name: Image version (YYYY.MM.DD UTC)
+        id: ver
+        run: |
+          set -euo pipefail
+          DATE_TAG="$(date -u +%Y.%m.%d)"
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+          {
+            echo "date_tag=${DATE_TAG}"
+            echo "image=${IMAGE}"
+          } >> "$GITHUB_OUTPUT"
+          echo "builder image: ${IMAGE} (${DATE_TAG})"
+
+  build-and-push:
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            platform: linux/amd64
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,19 +86,19 @@ jobs:
           ./scripts/resolve-dotnet-sdk.sh "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
-      - name: Image version (YYYY.MM.DD UTC)
+      - name: Per-arch image tags
         id: ver
+        env:
+          IMAGE: ${{ needs.meta.outputs.image }}
+          DATE_TAG: ${{ needs.meta.outputs.date_tag }}
+          ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
-          DATE_TAG="$(date -u +%Y.%m.%d)"
-          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
           {
-            echo "date_tag=${DATE_TAG}"
-            echo "image=${IMAGE}"
-            echo "tag_latest=${IMAGE}:latest"
-            echo "tag_date=${IMAGE}:${DATE_TAG}"
+            echo "tag_latest=${IMAGE}:latest-${ARCH}"
+            echo "tag_date=${IMAGE}:${DATE_TAG}-${ARCH}"
           } >> "$GITHUB_OUTPUT"
-          echo "builder tags: latest ${DATE_TAG}"
+          echo "builder tags (this arch): latest-${ARCH} ${DATE_TAG}-${ARCH}"
 
       - name: Free disk space
         run: |
@@ -85,18 +124,19 @@ jobs:
         with:
           context: .
           file: container/Dockerfile
+          platforms: ${{ matrix.platform }}
           load: true
           tags: localhost/copilot-desktop-gtk-builder:seed
           labels: |
             org.opencontainers.image.title=copilot-desktop-gtk-builder
             org.opencontainers.image.description=Azure Linux 4 + .NET 11 + Flatpak builder
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.ver.outputs.date_tag }}
+            org.opencontainers.image.version=${{ needs.meta.outputs.date_tag }}
             org.opencontainers.image.revision=${{ github.sha }}
           build-args: |
             DOTNET_SDK_VERSION=${{ steps.dotnet.outputs.DOTNET_SDK_VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=builder-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=builder-${{ matrix.arch }}
 
       - name: Seed Flatpak GNOME 50 runtimes
         run: |
@@ -119,3 +159,33 @@ jobs:
           set -euo pipefail
           docker push "${{ steps.ver.outputs.tag_latest }}"
           docker push "${{ steps.ver.outputs.tag_date }}"
+
+  # Join the two per-arch images under the plain tags. Runs only when
+  # the arch legs pushed (never on a pull request).
+  manifest:
+    if: github.event_name != 'pull_request'
+    needs: [meta, build-and-push]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifests
+        env:
+          IMAGE: ${{ needs.meta.outputs.image }}
+          DATE_TAG: ${{ needs.meta.outputs.date_tag }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            -t "${IMAGE}:latest" \
+            "${IMAGE}:latest-x86_64" \
+            "${IMAGE}:latest-aarch64"
+          docker buildx imagetools create \
+            -t "${IMAGE}:${DATE_TAG}" \
+            "${IMAGE}:${DATE_TAG}-x86_64" \
+            "${IMAGE}:${DATE_TAG}-aarch64"
+          docker buildx imagetools inspect "${IMAGE}:latest"
