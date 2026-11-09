@@ -5,7 +5,14 @@
 #   site/repo (ostree), .flatpakrepo, .flatpakref, index.html, .nojekyll.
 # Usage:   ./scripts/stage-flatpak-pages.sh [OSTREE_REPO] [SITE_DIR]
 # Env:     PAGES_OWNER, PAGES_REPO, FLATPAK_APP_ID, FLATPAK_APP_TITLE,
-#          FLATPAK_BRANCH, FLATPAK_REMOTE_NAME
+#          FLATPAK_BRANCH, FLATPAK_REMOTE_NAME, FLATPAK_OSTREE_SUBDIR,
+#          FLATPAKREF_FILE, FLATPAKREPO_FILE
+#   FLATPAK_OSTREE_SUBDIR is the site subdirectory the ostree repo lives
+#   under: "repo" by default (the x86_64 repo, URL unchanged from before
+#   multi-arch), "repo-aarch64" for the aarch64 repo staged alongside
+#   it. FLATPAKREF_FILE / FLATPAKREPO_FILE override the names of the
+#   generated install files, so the aarch64 pass can ship
+#   <app-id>-aarch64.flatpakref next to the default one.
 # CI:      Yes.
 
 set -euo pipefail
@@ -20,9 +27,12 @@ APP_ID="${FLATPAK_APP_ID:-com.github.sirredbeard.copilot-desktop-gtk}"
 APP_TITLE="${FLATPAK_APP_TITLE:-Copilot}"
 BRANCH="${FLATPAK_BRANCH:-stable}"
 REMOTE_NAME="${FLATPAK_REMOTE_NAME:-$REPO_NAME}"
+OSTREE_SUBDIR="${FLATPAK_OSTREE_SUBDIR:-repo}"
+FLATPAKREF_FILE="${FLATPAKREF_FILE:-${APP_ID}.flatpakref}"
+FLATPAKREPO_FILE="${FLATPAKREPO_FILE:-${REMOTE_NAME}.flatpakrepo}"
 
 pages_root="https://${OWNER}.github.io/${REPO_NAME}/"
-repo_url="${pages_root}repo/"
+repo_url="${pages_root}${OSTREE_SUBDIR}/"
 
 if [[ ! -f "$OSTREE_REPO/config" ]]; then
   echo "error: not an ostree repo: $OSTREE_REPO" >&2
@@ -31,7 +41,7 @@ fi
 
 rm -rf "$SITE_DIR"
 mkdir -p "$SITE_DIR"
-cp -a "$OSTREE_REPO" "$SITE_DIR/repo"
+cp -a "$OSTREE_REPO" "$SITE_DIR/$OSTREE_SUBDIR"
 
 # AppStream screenshot media for GNOME Software.
 # Prefer mirrored media from build-flatpak.sh (flatpak-builder --mirror-screenshots-url);
@@ -73,10 +83,10 @@ fi
   echo "# Flatpak ostree refs @ $(date -u +%Y-%m-%dT%H:%MZ)"
   echo "# base: $repo_url"
   if command -v ostree >/dev/null 2>&1; then
-    ostree --repo="$SITE_DIR/repo" refs 2>/dev/null || true
+    ostree --repo="$SITE_DIR/$OSTREE_SUBDIR" refs 2>/dev/null || true
   fi
-  find "$SITE_DIR/repo/refs" -type f 2>/dev/null | sed "s|^$SITE_DIR/repo/||" | sort || true
-} > "$SITE_DIR/repo/manifest.txt"
+  find "$SITE_DIR/$OSTREE_SUBDIR/refs" -type f 2>/dev/null | sed "s|^$SITE_DIR/$OSTREE_SUBDIR/||" | sort || true
+} > "$SITE_DIR/$OSTREE_SUBDIR/manifest.txt"
 
 # GPG: prefer freshly exported key from build-flatpak.sh, else packaging/.
 GPG_ASC=""
@@ -95,7 +105,7 @@ if [[ -n "$GPG_ASC" ]]; then
   cp -f "$GPG_ASC" "$SITE_DIR/flatpak-signing-key.asc"
 fi
 
-cat > "$SITE_DIR/${REMOTE_NAME}.flatpakrepo" <<REPO
+cat > "$SITE_DIR/${FLATPAKREPO_FILE}" <<REPO
 [Flatpak Repo]
 Title=${APP_TITLE} (GitHub Pages)
 Url=${repo_url}
@@ -107,7 +117,7 @@ ${GPG_KEY_LINE}
 REPO
 
 # One-shot install that also registers the Pages remote for flatpak update.
-cat > "$SITE_DIR/${APP_ID}.flatpakref" <<REF
+cat > "$SITE_DIR/${FLATPAKREF_FILE}" <<REF
 [Flatpak Ref]
 Title=${APP_TITLE}
 Name=${APP_ID}
@@ -127,6 +137,9 @@ export FLATPAK_APP_ID="$APP_ID"
 export FLATPAK_APP_TITLE="$APP_TITLE"
 export FLATPAK_BRANCH="$BRANCH"
 export FLATPAK_REMOTE_NAME="$REMOTE_NAME"
+export FLATPAK_OSTREE_SUBDIR="$OSTREE_SUBDIR"
+export FLATPAKREF_FILE="$FLATPAKREF_FILE"
+export FLATPAKREPO_FILE="$FLATPAKREPO_FILE"
 "${ROOT}/scripts/generate-flatpak-repo-index.sh" "$SITE_DIR"
 
 echo "staged Pages site at $SITE_DIR"
