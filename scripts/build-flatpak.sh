@@ -281,7 +281,16 @@ fi
 # --repo-url embeds the ostree remote in the bundle so install (CLI or GNOME
 # Software) can register it for updates. Without this, sideload shows
 # "No Software Repository Included" and Origin stays sideload.
-REPO_URL="${FLATPAK_REPO_URL:-https://${PAGES_OWNER}.github.io/${PAGES_REPO}/repo/}"
+# Each arch has its own Pages repo: repo/ for x86_64, repo-aarch64/ for
+# aarch64. An aarch64 bundle that embeds the x86_64 repo URL would hand
+# Arm machines an x86_64 remote, so the default follows the build arch.
+if [[ -n "${FLATPAK_REPO_URL:-}" ]]; then
+    REPO_URL="$FLATPAK_REPO_URL"
+elif [[ "$FLATPAK_ARCH" == "aarch64" ]]; then
+    REPO_URL="https://${PAGES_OWNER}.github.io/${PAGES_REPO}/repo-aarch64/"
+else
+    REPO_URL="https://${PAGES_OWNER}.github.io/${PAGES_REPO}/repo/"
+fi
 flatpak build-bundle "$REPO_DIR" "$BUNDLE" "$APP_ID" "$BRANCH" \
     --repo-url="$REPO_URL" \
     --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo
