@@ -169,9 +169,19 @@ fi
 git -C "$SRC_DIR" reset -q --hard "$UPSTREAM_MAIN_SHA"
 
 echo "=== Cherry-picking ${FORK_HEAD_SHA:0:12} onto upstream ${UPSTREAM_REF}#${UPSTREAM_MAIN_SHA:0:12} ===" >&2
+# The cherry-pick's output is redirected to stderr in full: this
+# script's stdout is a machine-readable contract (the caller evals it
+# for fork_head_sha/upstream_main_sha), and git prints
+# "Auto-merging <file>" notices to stdout whenever the pick needs real
+# content merges. Left on stdout, the caller tries to execute those
+# notices as commands - which is exactly what happens once upstream
+# drifts far enough past the fork branch for merges to occur. (An
+# earlier version even folded stderr in with 2>&1; the notices were
+# never on stderr to begin with.) Git's conflict output still reaches
+# the log, on stderr, where every other message in this script goes.
 if ! git -C "$SRC_DIR" -c user.email="webkit-dnd-overlay@localhost" \
         -c user.name="webkit-dnd-overlay" \
-        cherry-pick -n --keep-redundant-commits "$FORK_HEAD_SHA" 2>&1; then
+        cherry-pick -n --keep-redundant-commits "$FORK_HEAD_SHA" >&2; then
     echo "error: cherry-pick of ${FORK_HEAD_SHA:0:12} onto upstream ${UPSTREAM_REF} conflicted." >&2
     echo "       The fix branch and upstream main have drifted apart; it needs a human" >&2
     echo "       to resolve (likely: rebase the fix branch onto current upstream main)." >&2

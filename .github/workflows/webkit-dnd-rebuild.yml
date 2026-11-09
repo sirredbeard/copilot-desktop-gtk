@@ -9,15 +9,54 @@
 # a cached artifact - the VM only spins up when upstream WebKit moved, or
 # a new commit landed on the fork branch (e.g. addressing upstream
 # review).
+#
+# One call builds one arch's overlay. release.yml calls this twice, once
+# per arch, each with its own VM, runner label, and cache key prefix -
+# compiled WebKit libraries do not cross arches, and neither do their
+# cache entries.
 name: webkit-dnd-rebuild
 
 on:
   workflow_call:
+    inputs:
+      arch:
+        description: Target arch of this overlay build (x86_64 or aarch64).
+        type: string
+        default: x86_64
+      vm_name:
+        description: Azure VM hosting this arch's self-hosted runner.
+        type: string
+        default: azure-webkit-dnd-d16
+      runner_label:
+        description: Runner label selecting this arch's self-hosted runner.
+        type: string
+        default: webkit-dnd
+      cache_key_prefix:
+        description: Overlay cache key prefix; aarch64 passes its own so the arches never share a cache entry.
+        type: string
+        default: webkit-dnd
     outputs:
       overlay_cache_key:
         description: Cache key the built (or reused) overlay artifact is stored under.
         value: ${{ jobs.check-version.outputs.cache_key }}
   workflow_dispatch:
+    inputs:
+      arch:
+        description: Target arch of this overlay build (x86_64 or aarch64).
+        type: string
+        default: x86_64
+      vm_name:
+        description: Azure VM hosting this arch's self-hosted runner.
+        type: string
+        default: azure-webkit-dnd-d16
+      runner_label:
+        description: Runner label selecting this arch's self-hosted runner.
+        type: string
+        default: webkit-dnd
+      cache_key_prefix:
+        description: Overlay cache key prefix; aarch64 passes its own so the arches never share a cache entry.
+        type: string
+        default: webkit-dnd
 
 permissions:
   contents: read
@@ -43,7 +82,7 @@ jobs:
           # branch HEAD, and our fork's fix branch HEAD. Either one
           # changing produces a new cache key.
           eval "$(./scripts/fetch-webkit-dnd-patch.sh --sha-only)"
-          key="webkit-dnd-${fork_head_sha:0:12}-${upstream_main_sha:0:12}"
+          key="${{ inputs.cache_key_prefix }}-${fork_head_sha:0:12}-${upstream_main_sha:0:12}"
           echo "cache_key=${key}" >> "$GITHUB_OUTPUT"
           echo "resolved cache key: ${key}"
 
@@ -75,10 +114,10 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Start azure-webkit-dnd-d16
+      - name: Start overlay build VM (${{ inputs.arch }})
         run: |
           set -euo pipefail
-          az vm start -g rg-webkit-dnd -n azure-webkit-dnd-d16
+          az vm start -g rg-webkit-dnd -n "${{ inputs.vm_name }}"
           # Self-hosted runner service on the VM registers itself once the
           # VM is up; give it a moment before the next job tries to claim it.
           sleep 60
@@ -86,7 +125,7 @@ jobs:
   rebuild-webkit:
     needs: [check-version, start-vm]
     if: needs.check-version.outputs.cache_hit != 'true'
-    runs-on: [self-hosted, webkit-dnd]
+    runs-on: [self-hosted, "${{ inputs.runner_label }}"]
     container:
       image: ghcr.io/sirredbeard/webkitgtk-dnd-fix-builder:latest
       credentials:
@@ -137,5 +176,5 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deallocate azure-webkit-dnd-d16
-        run: az vm deallocate -g rg-webkit-dnd -n azure-webkit-dnd-d16 --no-wait
+      - name: Deallocate overlay build VM (${{ inputs.arch }})
+        run: az vm deallocate -g rg-webkit-dnd -n "${{ inputs.vm_name }}" --no-wait

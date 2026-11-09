@@ -52,15 +52,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${ROOT}/dist/webkit-dnd-artifact"
 
-# x86_64 only. The Sdk paths below are x86_64 paths, the build VM is
-# x86_64, and the Flatpak manifest marks the overlay module x86_64-only
-# (only-arches). aarch64 builds use the runtime's own WebKitGTK until
-# there is an aarch64 overlay build. Fail here, not halfway through a
-# WebKit compile pointed at the wrong Sdk.
-if [[ "$(uname -m)" != "x86_64" ]]; then
-    echo "error: the WebKit drag-and-drop overlay build is x86_64 only (host is $(uname -m))" >&2
-    exit 1
-fi
+# Both release arches, one build host per arch. The Sdk paths below
+# are per-arch (the Sdk installs under runtime/org.gnome.Sdk/<arch>/
+# and its libxml2 under lib/<triplet>/), and the build VM is a machine
+# of the target arch (azure-webkit-dnd-d16 for x86_64,
+# azure-webkit-dnd-arm-d16 for aarch64 - see
+# .github/workflows/webkit-dnd-rebuild.yml). Fail here, not halfway
+# through a WebKit compile pointed at the wrong Sdk.
+HOST_ARCH="$(uname -m)"
+case "$HOST_ARCH" in
+    x86_64)  TRIPLET="x86_64-linux-gnu" ;;
+    aarch64) TRIPLET="aarch64-linux-gnu" ;;
+    *)
+        echo "error: the WebKit drag-and-drop overlay build supports x86_64 and aarch64 (host is ${HOST_ARCH})" >&2
+        exit 1
+        ;;
+esac
 
 # Persistent, shared host cache - the same /var/cache/webkit-dnd NVMe path
 # the WebKitGTK-DND-Fix runner already uses on this VM (see
@@ -89,14 +96,14 @@ mkdir -p "$OUT"/{lib,libexec/webkitgtk-6.0}
 # directory name under .../50/ is a content hash that changes whenever
 # the Sdk updates, so it's globbed fresh each run rather than pinned.
 SDK_USER_DIR="${GNOME_SDK_USER_DIR:-/var/lib/flatpak-builder-user}"
-sdk_dirs=("${SDK_USER_DIR}"/runtime/org.gnome.Sdk/x86_64/50/*/files)
+sdk_dirs=("${SDK_USER_DIR}"/runtime/org.gnome.Sdk/"${HOST_ARCH}"/50/*/files)
 if [[ ! -d "${sdk_dirs[0]}" ]]; then
     echo "error: org.gnome.Sdk//50 not found under ${SDK_USER_DIR} - see .github/workflows/webkit-dnd-rebuild.yml for the required bind-mount" >&2
     exit 1
 fi
 SDK_FILES="${sdk_dirs[0]}"
 SDK_LIBXML2_INCLUDE="${SDK_FILES}/include/libxml2"
-SDK_LIBXML2_LIB="$(compgen -G "${SDK_FILES}/lib/x86_64-linux-gnu/libxml2.so.*.*" | head -1)"
+SDK_LIBXML2_LIB="$(compgen -G "${SDK_FILES}/lib/${TRIPLET}/libxml2.so.*.*" | head -1)"
 if [[ ! -d "$SDK_LIBXML2_INCLUDE" || -z "$SDK_LIBXML2_LIB" ]]; then
     echo "error: could not resolve libxml2 headers/library inside ${SDK_FILES}" >&2
     exit 1

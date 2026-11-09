@@ -151,12 +151,15 @@ Pages ostree so GNOME Software does not claim "No Software Repository Included"
 when that metadata is present. Still document `.flatpakref` as the default.
 Ostree repo is cached across runs per arch (`flatpak-ostree-<arch>-` cache key) for history/deltas.
 
-The patched WebKitGTK overlay is x86_64 only: it builds on a self-hosted
-x86_64 VM, and the Flatpak manifest marks the overlay module
-`only-arches: [x86_64]`. aarch64 builds ship the runtime's own WebKitGTK,
-so external file drag-and-drop stays limited on aarch64 until there is
-an aarch64 overlay build. Do not quietly drop the overlay on x86_64 to
-make the arches match.
+The patched WebKitGTK overlay builds per arch, each on a self-hosted
+VM of that arch (`azure-webkit-dnd-d16` for x86_64,
+`azure-webkit-dnd-arm-d16` for aarch64; `webkit-dnd-rebuild.yml` takes
+the arch, VM, runner label, and cache key prefix as inputs, and
+`release.yml` calls it once per arch). The Flatpak manifest applies
+the overlay module on both arches and `build-flatpak.sh` fails without
+a staged overlay - there is no silent fallback to the runtime's
+WebKitGTK. Do not quietly drop the overlay on either arch to make a
+build pass.
 
 Release versioning: `next-version.sh` picks the next patch, `stamp-version.sh` writes it into
 AppConstants/csproj/metainfo, `build-flatpak.sh` stamps again before bundle export, and
