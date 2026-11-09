@@ -89,6 +89,7 @@ internal sealed class CliOptions
     public bool SmokeTest { get; init; }
     public bool LowMemory { get; init; }
     public bool WebKitDebug { get; init; }
+    public bool AllowPopups { get; init; }
     /// <summary>always | never | auto, or null to use env / defaults.</summary>
     public string? HardwareAcceleration { get; init; }
     public string? OpenUri { get; init; }
@@ -103,6 +104,7 @@ internal sealed class CliOptions
         var smoke = false;
         var lowMemory = false;
         var webkitDebug = false;
+        var allowPopups = IsTruthy(Environment.GetEnvironmentVariable("COPILOT_ALLOW_POPUPS"));
         string? ha = null;
         string? openUri = null;
 
@@ -139,6 +141,9 @@ internal sealed class CliOptions
                 case "--webkit-debug":
                     webkitDebug = true;
                     break;
+                case "--allow-popups":
+                    allowPopups = true;
+                    break;
                 case "--hardware-acceleration":
                     if (i + 1 < args.Length)
                     {
@@ -172,6 +177,7 @@ internal sealed class CliOptions
             SmokeTest = smoke,
             LowMemory = lowMemory,
             WebKitDebug = webkitDebug,
+            AllowPopups = allowPopups,
             HardwareAcceleration = ha,
             OpenUri = openUri,
         };
@@ -191,6 +197,7 @@ internal sealed class CliOptions
               --daemon            Long-running helper mode (same as --tray for this app)
               --toggle-windows    Toggle visibility of the running instance (second launch)
               --low-memory        Prefer lower WebKit RAM (HA off, smaller cache, no page cache)
+              --allow-popups      Allow all HTTP(S) popup windows (OAuth is allowed by default)
               --hardware-acceleration always|never|auto
                                   GPU policy (default auto: never on small/low-RAM hosts)
               --webkit-debug      Print page console.* and profile line to stdout
@@ -202,6 +209,7 @@ internal sealed class CliOptions
               COPILOT_LOW_MEMORY=1
               COPILOT_HARDWARE_ACCELERATION=always|never|auto
               COPILOT_WEBKIT_DEBUG=1
+              COPILOT_ALLOW_POPUPS=1
               COPILOT_TRAY_AYATANA=1
               COPILOT_DISABLE_COMPOSITING=1
               WEBKIT_DISABLE_COMPOSITING_MODE=1
@@ -217,5 +225,10 @@ internal sealed class CliOptions
               Auto low-memory turns on when MemTotal is at most 6 GiB or
               MemAvailable is under 2 GiB (typical constrained VMs).
             """);
+    }
+
+    private static bool IsTruthy(string? value)
+    {
+        return value is "1" or "true" or "TRUE" or "yes" or "YES" or "on" or "ON";
     }
 }

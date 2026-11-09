@@ -38,6 +38,20 @@ flatpak run com.github.sirredbeard.copilot-desktop-gtk
 
 The `.flatpakref` adds the project repo for updates, embeds the signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when needed. Each arch has its own repo on the same Pages site: `repo/` for x86_64, `repo-aarch64/` for aarch64.
 
+## Popup windows
+
+OAuth authorization popups are enabled by default and use a related WebKit window so the signed-in session can return to Copilot. To allow all HTTP(S) popup windows, start the app with:
+
+```bash
+COPILOT_ALLOW_POPUPS=1 flatpak run com.github.sirredbeard.copilot-desktop-gtk
+```
+
+To keep that setting for the Flatpak:
+
+```bash
+flatpak override --user --env=COPILOT_ALLOW_POPUPS=1 com.github.sirredbeard.copilot-desktop-gtk
+```
+
 ## Releases
 
 [Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also have, per arch:
