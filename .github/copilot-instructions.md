@@ -4,7 +4,7 @@ Maintainer and coding-agent norms. User-facing install docs stay in `README.md`.
 
 ## What this is
 
-Unofficial self-contained Native AOT .NET 11 GTK4/WebKit app for Microsoft Copilot on Linux x86_64. Display name is Copilot, not "Copilot Desktop". Distribution is Flatpak from the GitHub Pages ostree repo (primary, with updates), plus single-file `.flatpak` and bare AOT binary on GitHub Releases.
+Unofficial self-contained Native AOT .NET 11 GTK4/WebKit app for Microsoft Copilot on Linux x86_64 and aarch64. Display name is Copilot, not "Copilot Desktop". Distribution is Flatpak from the GitHub Pages ostree repo (primary, with updates), plus single-file `.flatpak` and bare AOT binary on GitHub Releases.
 
 Not affiliated with Microsoft. Trademark and third-party notices live in `NOTICE`. Icon source is `assets/icons/copilot.png`.
 
@@ -35,9 +35,11 @@ Not affiliated with Microsoft. Trademark and third-party notices live in `NOTICE
 
 ## Builder image details
 
-- Base: `mcr.microsoft.com/azurelinux-beta/base/core:4.0`
-- GTK4 / WebKitGTK devel: Fedora 43 Everything + updates (`cost=50`)
-- clang AOT link fix: copy Fedora `gcc` multilib into `x86_64-azurelinux-linux` triple
+- Base: `mcr.microsoft.com/azurelinux-beta/base/core:4.0` (multi-arch manifest, amd64 + arm64)
+- GTK4 / WebKitGTK devel: Fedora 43 Everything + updates (`cost=50`), repo arch per `TARGETARCH` (`x86_64` or `aarch64`)
+- clang AOT link fix: copy Fedora `gcc` multilib into the `<arch>-azurelinux-linux` triple
+- Arch names come from `scripts/resolve-arch.sh`: one place maps x86_64/aarch64 to the .NET RID, SDK tarball arch, Fedora arch, Flatpak arch, and Docker arch. Do not hard-code an arch string anywhere else.
+- Builder image is built per arch on native runners and joined into one multi-arch GHCR manifest (`latest`, `YYYY.MM.DD`); the per-arch tags are `latest-<arch>` / `YYYY.MM.DD-<arch>`. No QEMU anywhere: the Flatpak seed step and AOT linking both want a native machine.
 - .NET 11 SDK from release-metadata tarball → `/usr/share/dotnet`
 - Flatpak stack in-image; `FLATPAK_USER_DIR=/var/lib/flatpak-builder-user`
 - Pre-seeded Flathub install: `org.gnome.Platform//50`, `org.gnome.Sdk//50`, Locale for both, `org.freedesktop.Platform.GL.default//25.08` (+extra), `codecs-extra//25.08-extra` so release does not re-download ~2GB per run. Weekly builder rebuild refreshes them. `build-flatpak.sh` skips install when already present.
@@ -59,8 +61,9 @@ Contract (`scripts/build-flatpak.sh` + `packaging/flatpak-gpg/`):
 
 1. Import key from Actions secrets (see below) or local GPG home.
 2. Refresh appstream **without** static deltas.
-3. `ostree gpg-sign` **every** ref tip: `app/*`, `appstream2/x86_64`,
-   `appstream/x86_64`, `screenshots/x86_64`. `flatpak build-sign` alone is
+3. `ostree gpg-sign` **every** ref tip in that arch's repo: `app/*`,
+   `appstream2/<arch>`, `appstream/<arch>`, `screenshots/<arch>`.
+   `flatpak build-sign` alone is
    not enough for Software (it signs app commits only).
 4. **Then** `flatpak build-update-repo --generate-static-deltas`. Deltas
    built before signatures make default pulls report "no signatures found"
@@ -118,30 +121,42 @@ Validate with `appstreamcli validate` when tooling is available. Prefer complete
 
 - `seed-flatpak-runtimes.sh` - install GNOME 50 Platform/Sdk/GL/codecs into FLATPAK_USER_DIR
 
-- `resolve-dotnet-sdk.sh` - latest .NET 11 SDK from release-metadata
+- `resolve-arch.sh` - target arch (host, or `$COPILOT_ARCH`) mapped to RID / SDK / Fedora / Flatpak / Docker arch names
+- `resolve-dotnet-sdk.sh` - latest .NET 11 SDK from release-metadata, tarball arch from `resolve-arch.sh`
 - `build-builder-image.sh` - `podman build` local builder
 - `podman-build-local.sh` - build/package/lint/smoke inside builder
-- `build-app.sh` - Native AOT publish
+- `build-app.sh` - Native AOT publish for the host arch (`linux-x64` or `linux-arm64` per `resolve-arch.sh`)
 - `build-icons.sh` - icon sizes from logo asset
 - `build-flatpak.sh` - manifest → ostree repo (stable branch); GPG-sign every tip; **then** static deltas; bundle
 - `test-smoke.sh` - headless smoke of the AOT binary
 
 ## Workflows
 
-- `builder-image.yml`: build + push builder to GHCR; weekly cron + path filters + manual dispatch. Tags: `latest` and `YYYY.MM.DD`.
-- `release.yml`: manual dispatch only. Auto-bumps patch, builds AOT + Flatpak in the builder image, deploys Pages ostree repo, creates `vX.Y.Z` Release with binary + `.flatpak`. No separate CI workflow. No tag-push trigger.
+- `builder-image.yml`: build + push builder to GHCR for both arches (matrix on native runners, manifest job joins them); weekly cron + path filters + manual dispatch. Tags: `latest` and `YYYY.MM.DD`, each a multi-arch manifest.
+- `release.yml`: manual dispatch only. Auto-bumps patch, builds AOT + Flatpak in the builder image on a matrix (x86_64 on `ubuntu-latest`, aarch64 on `ubuntu-24.04-arm`), deploys Pages ostree repos, creates `vX.Y.Z` Release with per-arch binaries + `.flatpak` bundles. No separate CI workflow. No tag-push trigger.
 
 Publish: `gh workflow run release.yml`
 
-Release also stages `dist/pages-site` (ostree under `repo/`, `.flatpakrepo`,
-`.flatpakref`, `index.html`, `.nojekyll`) and deploys it with
-`actions/deploy-pages`. Landing URL:
+Release stages `dist/pages-site` in the publish job, which is the first
+job with both arches in hand (ostree under `repo/` for x86_64 and
+`repo-aarch64/` for aarch64, both `.flatpakrepo` / `.flatpakref` pairs,
+`index.html`, `.nojekyll`) and deploys it with `actions/deploy-pages`.
+Two per-arch repos, not one merged repo: each arch keeps the signing and
+static-delta flow `build-flatpak.sh` proves per build, unchanged. The
+x86_64 repo URL does not move, so existing installs keep updating. Landing URL:
 `https://sirredbeard.github.io/copilot-desktop-gtk/`. Primary install path is the
 `.flatpakref` so the Pages remote stays configured for `flatpak update`.
 Bundles are built with `flatpak build-bundle --repo-url=` pointing at the same
 Pages ostree so GNOME Software does not claim "No Software Repository Included"
 when that metadata is present. Still document `.flatpakref` as the default.
-Ostree repo is cached across runs (`flatpak-ostree-` cache key) for history/deltas.
+Ostree repo is cached across runs per arch (`flatpak-ostree-<arch>-` cache key) for history/deltas.
+
+The patched WebKitGTK overlay is x86_64 only: it builds on a self-hosted
+x86_64 VM, and the Flatpak manifest marks the overlay module
+`only-arches: [x86_64]`. aarch64 builds ship the runtime's own WebKitGTK,
+so external file drag-and-drop stays limited on aarch64 until there is
+an aarch64 overlay build. Do not quietly drop the overlay on x86_64 to
+make the arches match.
 
 Release versioning: `next-version.sh` picks the next patch, `stamp-version.sh` writes it into
 AppConstants/csproj/metainfo, `build-flatpak.sh` stamps again before bundle export, and
