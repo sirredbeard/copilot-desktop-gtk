@@ -112,7 +112,13 @@ modules:
   # /etc/ld.so.conf only auto-scans bare /app/lib for an app's own
   # commit, so a multiarch-triplet subdir there is invisible to ldconfig
   # and the app silently keeps resolving the runtime's own WebKitGTK.
+  # x86_64 only for now: the overlay builds on a self-hosted x86_64 VM
+  # (webkit-dnd-rebuild.yml), and there is no aarch64 overlay build yet.
+  # On aarch64 the module is skipped and the app uses the runtime's own
+  # WebKitGTK, so external file drag-and-drop stays limited there.
   - name: webkit-dnd-overlay
+    only-arches:
+      - x86_64
     buildsystem: simple
     build-commands:
       - mkdir -p /app/lib /app/libexec/webkitgtk-6.0
