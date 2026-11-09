@@ -38,8 +38,6 @@ flatpak run com.github.sirredbeard.copilot-desktop-gtk
 
 The `.flatpakref` adds the project repo for updates, embeds the signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when needed. Each arch has its own repo on the same Pages site: `repo/` for x86_64, `repo-aarch64/` for aarch64.
 
-One difference on aarch64: the build ships without the patched WebKitGTK overlay, so dragging a file from a file manager into an upload area is limited there. The overlay build is x86_64 only for now. Everything else is the same app.
-
 ## Releases
 
 [Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also have, per arch:

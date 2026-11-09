@@ -38,16 +38,12 @@ if [[ ! -x "${ROOT}/dist/publish/copilot-desktop-gtk" ]]; then
 fi
 
 if [[ ! -d "${ROOT}/dist/webkit-dnd-overlay" ]]; then
-    if [[ "$FLATPAK_ARCH" == "x86_64" ]]; then
-        echo "error: missing dist/webkit-dnd-overlay - run stage-webkit-dnd-overlay.sh first" >&2
-        echo "       (see packaging/webkit-dnd/README.md)" >&2
-        exit 1
-    fi
-    # The overlay module is x86_64-only (only-arches in the manifest) and
-    # flatpak-builder skips it on this arch. Create the empty source dir
-    # the manifest names so nothing downstream trips over a missing path.
-    echo "note: no WebKit drag-and-drop overlay for ${FLATPAK_ARCH}; using the runtime WebKitGTK"
-    mkdir -p "${ROOT}/dist/webkit-dnd-overlay"
+    # Both arches carry the overlay module, so a missing staged overlay
+    # is a build error on either arch, never a silent fallback to the
+    # runtime's WebKitGTK.
+    echo "error: missing dist/webkit-dnd-overlay - run stage-webkit-dnd-overlay.sh first" >&2
+    echo "       (see packaging/webkit-dnd/README.md)" >&2
+    exit 1
 fi
 
 flatpak_builder() {
