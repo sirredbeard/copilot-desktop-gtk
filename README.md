@@ -4,7 +4,7 @@
 
 Unofficial Linux desktop app for [Microsoft Copilot](https://copilot.microsoft.com).
 
-Native AOT .NET 11, GTK4, WebKitGTK. Shipped as Flatpak.
+Native AOT .NET 11, GTK4, WebKitGTK. Shipped as Flatpak for x86_64 and aarch64.
 
 * .NET: AOT, self-contained, speed-optimized
 * GTK4 using [Gir.Core](https://github.com/gircore/gir.core)
@@ -20,24 +20,36 @@ This project is not affiliated with, sponsored, or endorsed by Microsoft. Micros
 
 ## Install
 
+x86_64:
+
 ```bash
 flatpak install --user --from \
   https://sirredbeard.github.io/copilot-desktop-gtk/com.github.sirredbeard.copilot-desktop-gtk.flatpakref
 flatpak run com.github.sirredbeard.copilot-desktop-gtk
 ```
 
-The `.flatpakref` adds the project repo for updates, embeds the signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when needed.
+aarch64:
+
+```bash
+flatpak install --user --from \
+  https://sirredbeard.github.io/copilot-desktop-gtk/com.github.sirredbeard.copilot-desktop-gtk-aarch64.flatpakref
+flatpak run com.github.sirredbeard.copilot-desktop-gtk
+```
+
+The `.flatpakref` adds the project repo for updates, embeds the signing key (`GPGKey=`), and pulls the GNOME runtime from Flathub when needed. Each arch has its own repo on the same Pages site: `repo/` for x86_64, `repo-aarch64/` for aarch64.
+
+One difference on aarch64: the build ships without the patched WebKitGTK overlay, so dragging a file from a file manager into an upload area is limited there. The overlay build is x86_64 only for now. Everything else is the same app.
 
 ## Releases
 
-[Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also have:
+[Releases](https://github.com/sirredbeard/copilot-desktop-gtk/releases) also have, per arch:
 
-* A single-file `.flatpak` bundle
-* A bare Native AOT binary (no GNOME runtime)
+* A single-file `.flatpak` bundle (`-x86_64` / `-aarch64` in the file name)
+* A bare Native AOT binary (no GNOME runtime), `copilot-desktop-gtk-x86_64` / `copilot-desktop-gtk-aarch64`
 
 ## Build with Podman
 
-Uses the project builder image (Azure Linux 4, latest .NET 11 SDK, Flatpak tooling).
+Uses the project builder image (Azure Linux 4, latest .NET 11 SDK, Flatpak tooling). The image is multi-arch: a local build builds the host arch, and CI builds each arch on a runner of that arch and joins them under one tag.
 
 ```bash
 ./scripts/build-builder-image.sh

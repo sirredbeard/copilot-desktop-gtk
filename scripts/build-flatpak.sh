@@ -24,6 +24,10 @@ BUILD_DIR="${ROOT}/dist/flatpak-build"
 REPO_DIR="${ROOT}/dist/flatpak-repo"
 BUNDLE="${ROOT}/dist/flatpak/${APP_ID}-${VERSION}.flatpak"
 BRANCH="${FLATPAK_BRANCH:-stable}"
+# Host arch in Flatpak/ostree spelling (x86_64 or aarch64). A build only
+# ever produces its own arch: Flatpak runtimes, the AOT binary, and the
+# ostree refs are all arch-specific.
+eval "$("${ROOT}/scripts/resolve-arch.sh" /dev/stdout | grep '^FLATPAK_ARCH=')"
 
 # Keep AppStream release version in sync with the bundle name.
 "${ROOT}/scripts/stamp-version.sh" "$VERSION"
@@ -34,9 +38,16 @@ if [[ ! -x "${ROOT}/dist/publish/copilot-desktop-gtk" ]]; then
 fi
 
 if [[ ! -d "${ROOT}/dist/webkit-dnd-overlay" ]]; then
-    echo "error: missing dist/webkit-dnd-overlay - run stage-webkit-dnd-overlay.sh first" >&2
-    echo "       (see packaging/webkit-dnd/README.md)" >&2
-    exit 1
+    if [[ "$FLATPAK_ARCH" == "x86_64" ]]; then
+        echo "error: missing dist/webkit-dnd-overlay - run stage-webkit-dnd-overlay.sh first" >&2
+        echo "       (see packaging/webkit-dnd/README.md)" >&2
+        exit 1
+    fi
+    # The overlay module is x86_64-only (only-arches in the manifest) and
+    # flatpak-builder skips it on this arch. Create the empty source dir
+    # the manifest names so nothing downstream trips over a missing path.
+    echo "note: no WebKit drag-and-drop overlay for ${FLATPAK_ARCH}; using the runtime WebKitGTK"
+    mkdir -p "${ROOT}/dist/webkit-dnd-overlay"
 fi
 
 flatpak_builder() {
@@ -246,12 +257,12 @@ if [[ -n "$GPG_KEY_ID" ]]; then
   ostree --repo="$VERIFY_REPO" remote add --gpg-import="$VERIFY_KEY" \
     local "file://${REPO_DIR}"
   if ! ostree --repo="$VERIFY_REPO" pull --depth=0 local \
-      "app/${APP_ID}/x86_64/${BRANCH}"; then
+      "app/${APP_ID}/${FLATPAK_ARCH}/${BRANCH}"; then
     echo "error: GPG static-delta pull of app tip failed" >&2
     rm -rf "$VERIFY_DIR"
     exit 1
   fi
-  if ! ostree --repo="$VERIFY_REPO" pull --depth=0 local appstream2/x86_64; then
+  if ! ostree --repo="$VERIFY_REPO" pull --depth=0 local "appstream2/${FLATPAK_ARCH}"; then
     echo "error: GPG static-delta pull of appstream2 tip failed" >&2
     rm -rf "$VERIFY_DIR"
     exit 1
@@ -270,7 +281,16 @@ fi
 # --repo-url embeds the ostree remote in the bundle so install (CLI or GNOME
 # Software) can register it for updates. Without this, sideload shows
 # "No Software Repository Included" and Origin stays sideload.
-REPO_URL="${FLATPAK_REPO_URL:-https://${PAGES_OWNER}.github.io/${PAGES_REPO}/repo/}"
+# Each arch has its own Pages repo: repo/ for x86_64, repo-aarch64/ for
+# aarch64. An aarch64 bundle that embeds the x86_64 repo URL would hand
+# Arm machines an x86_64 remote, so the default follows the build arch.
+if [[ -n "${FLATPAK_REPO_URL:-}" ]]; then
+    REPO_URL="$FLATPAK_REPO_URL"
+elif [[ "$FLATPAK_ARCH" == "aarch64" ]]; then
+    REPO_URL="https://${PAGES_OWNER}.github.io/${PAGES_REPO}/repo-aarch64/"
+else
+    REPO_URL="https://${PAGES_OWNER}.github.io/${PAGES_REPO}/repo/"
+fi
 flatpak build-bundle "$REPO_DIR" "$BUNDLE" "$APP_ID" "$BRANCH" \
     --repo-url="$REPO_URL" \
     --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo

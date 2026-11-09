@@ -52,6 +52,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${ROOT}/dist/webkit-dnd-artifact"
 
+# x86_64 only. The Sdk paths below are x86_64 paths, the build VM is
+# x86_64, and the Flatpak manifest marks the overlay module x86_64-only
+# (only-arches). aarch64 builds use the runtime's own WebKitGTK until
+# there is an aarch64 overlay build. Fail here, not halfway through a
+# WebKit compile pointed at the wrong Sdk.
+if [[ "$(uname -m)" != "x86_64" ]]; then
+    echo "error: the WebKit drag-and-drop overlay build is x86_64 only (host is $(uname -m))" >&2
+    exit 1
+fi
+
 # Persistent, shared host cache - the same /var/cache/webkit-dnd NVMe path
 # the WebKitGTK-DND-Fix runner already uses on this VM (see
 # .github/workflows/webkit-dnd-rebuild.yml for the bind-mount). SRC is a

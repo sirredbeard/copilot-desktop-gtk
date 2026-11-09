@@ -8,11 +8,19 @@
 #
 # Build:  ./scripts/build-builder-image.sh
 # Run:    ./scripts/podman-build-local.sh
+#
+# One Dockerfile builds both arches. The Azure Linux 4 base is a
+# multi-arch manifest (amd64 + arm64), TARGETARCH picks the Fedora repo
+# arch, the gcc triple prefix, and the .NET SDK tarball for the image
+# being built. CI builds each arch on a runner of that arch
+# (builder-image.yml); a local podman build builds the host arch.
 
 FROM mcr.microsoft.com/azurelinux-beta/base/core:4.0
 
 ARG DOTNET_SDK_VERSION=11.0.100-preview.7.26381.103
 ARG FEDORA_RELEASE=43
+# Predefined build arg (amd64 or arm64); declared so RUN steps can read it.
+ARG TARGETARCH
 
 LABEL org.opencontainers.image.title="copilot-desktop-gtk-builder" \
       org.opencontainers.image.description="Azure Linux 4 + .NET 11 + Flatpak builder for copilot-desktop-gtk" \
@@ -57,18 +65,21 @@ RUN tdnf -y update && \
 
 # Fedora 43 repos for GTK/WebKit/Flatpak packages not on AZL4 container images.
 # Written with printf (not Dockerfile heredoc) so container builders do not
-# treat [fedora43] as a Dockerfile instruction.
-RUN printf '%s\n' \
+# treat [fedora43] as a Dockerfile instruction. The repo path segment is
+# the Fedora arch for TARGETARCH: x86_64 for amd64, aarch64 for arm64.
+RUN fa=x86_64; \
+    if [ "${TARGETARCH:-amd64}" = "arm64" ]; then fa=aarch64; fi; \
+    printf '%s\n' \
       '[fedora43]' \
-      'name=Fedora 43 Everything x86_64' \
-      'baseurl=https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/x86_64/os/' \
+      "name=Fedora 43 Everything ${fa}" \
+      "baseurl=https://dl.fedoraproject.org/pub/fedora/linux/releases/43/Everything/${fa}/os/" \
       'enabled=1' \
       'gpgcheck=0' \
       'cost=50' \
       '' \
       '[fedora43-updates]' \
-      'name=Fedora 43 Updates x86_64' \
-      'baseurl=https://dl.fedoraproject.org/pub/fedora/linux/updates/43/Everything/x86_64/' \
+      "name=Fedora 43 Updates ${fa}" \
+      "baseurl=https://dl.fedoraproject.org/pub/fedora/linux/updates/43/Everything/${fa}/" \
       'enabled=1' \
       'gpgcheck=0' \
       'cost=50' \
@@ -134,10 +145,13 @@ RUN tdnf -y install libayatana-appindicator-gtk3 || tdnf -y install libappindica
 RUN tdnf -y install compiler-rt lld llvm || true
 RUN tdnf clean all || true
 
-# AZL clang looks under x86_64-azurelinux-linux; Fedora gcc is x86_64-redhat-linux.
+# AZL clang looks under <arch>-azurelinux-linux; Fedora gcc is
+# <arch>-redhat-linux, with <arch> x86_64 or aarch64 per TARGETARCH.
 RUN set -eu; \
-    azl="/usr/lib/gcc/x86_64-azurelinux-linux"; \
-    rh="/usr/lib/gcc/x86_64-redhat-linux"; \
+    tp=x86_64; \
+    if [ "${TARGETARCH:-amd64}" = "arm64" ]; then tp=aarch64; fi; \
+    azl="/usr/lib/gcc/${tp}-azurelinux-linux"; \
+    rh="/usr/lib/gcc/${tp}-redhat-linux"; \
     if [ -d "$rh" ]; then \
       ver="$(ls -1 "$rh" | head -n1)"; \
       mkdir -p "$azl/$ver"; \
@@ -148,8 +162,11 @@ RUN set -eu; \
     rm -f /tmp/aot-link-check /tmp/aot-link-check.c
 
 # Side-load .NET 11 preview SDK (not on Microsoft yum for AZL4 yet).
-RUN curl -fsSL \
-      "https://builds.dotnet.microsoft.com/dotnet/Sdk/${DOTNET_SDK_VERSION}/dotnet-sdk-${DOTNET_SDK_VERSION}-linux-x64.tar.gz" \
+# Tarball arch: x64 for amd64 images, arm64 for arm64 images.
+RUN sa=x64; \
+    if [ "${TARGETARCH:-amd64}" = "arm64" ]; then sa=arm64; fi; \
+    curl -fsSL \
+      "https://builds.dotnet.microsoft.com/dotnet/Sdk/${DOTNET_SDK_VERSION}/dotnet-sdk-${DOTNET_SDK_VERSION}-linux-${sa}.tar.gz" \
       -o /tmp/dotnet-sdk.tar.gz \
     && mkdir -p /usr/share/dotnet /etc/environment.d /etc/profile.d \
     && tar -xzf /tmp/dotnet-sdk.tar.gz -C /usr/share/dotnet \

@@ -4,15 +4,17 @@
 # Purpose: Build simple HTML listings for a Pages-hosted Flatpak ostree repo.
 #   GitHub Pages has no autoindex; without index.html directory URLs 404.
 # Usage:   ./scripts/generate-flatpak-repo-index.sh SITE_DIR
-# Expects: SITE_DIR/repo/ (ostree), optional .flatpakrepo / .flatpakref at SITE_DIR
+# Expects: SITE_DIR/<subdir>/ (ostree), optional .flatpakrepo / .flatpakref at SITE_DIR
 # Env:     PAGES_OWNER, PAGES_REPO, FLATPAK_APP_ID, FLATPAK_APP_TITLE,
-#          FLATPAK_BRANCH, FLATPAK_REMOTE_NAME
+#          FLATPAK_BRANCH, FLATPAK_REMOTE_NAME, FLATPAK_OSTREE_SUBDIR,
+#          FLATPAKREF_FILE, FLATPAKREPO_FILE
 # CI:      Yes.
 
 set -euo pipefail
 
 SITE_DIR="${1:?usage: $0 SITE_DIR}"
-REPO_DIR="$SITE_DIR/repo"
+OSTREE_SUBDIR="${FLATPAK_OSTREE_SUBDIR:-repo}"
+REPO_DIR="$SITE_DIR/$OSTREE_SUBDIR"
 test -d "$REPO_DIR"
 
 OWNER="${PAGES_OWNER:-USER}"
@@ -21,8 +23,10 @@ APP_ID="${FLATPAK_APP_ID:-com.example.App}"
 APP_TITLE="${FLATPAK_APP_TITLE:-Flatpak app}"
 BRANCH="${FLATPAK_BRANCH:-stable}"
 REMOTE_NAME="${FLATPAK_REMOTE_NAME:-$REPO_NAME}"
+FLATPAKREF_FILE="${FLATPAKREF_FILE:-${APP_ID}.flatpakref}"
+FLATPAKREPO_FILE="${FLATPAKREPO_FILE:-${REMOTE_NAME}.flatpakrepo}"
 pages_root="https://${OWNER}.github.io/${REPO_NAME}/"
-repo_url="${pages_root}repo/"
+repo_url="${pages_root}${OSTREE_SUBDIR}/"
 generated_at="$(date -u +'%Y-%m-%d %H:%M UTC')"
 
 : > "$SITE_DIR/.nojekyll"
@@ -55,7 +59,7 @@ Browsers do not get automatic directory listings here, so this page is the human
 Point a <code>.flatpakrepo</code> / <code>.flatpakref</code> at the site root, or add the remote by URL.
 </p>
 <h2>Install ${APP_TITLE}</h2>
-<pre>flatpak install --user --from ${pages_root}${APP_ID}.flatpakref
+<pre>flatpak install --user --from ${pages_root}${FLATPAKREF_FILE}
 flatpak run ${APP_ID}</pre>
 <p class="muted">
 The <code>.flatpakref</code> path adds this remote and installs the app so
@@ -64,8 +68,8 @@ stream: Flatpak may ask you to confirm a remote without GPG.
 </p>
 <h2>Quick links</h2>
 <ul>
-  <li><a href="../${APP_ID}.flatpakref"><code>${APP_ID}.flatpakref</code></a></li>
-  <li><a href="../${REMOTE_NAME}.flatpakrepo"><code>${REMOTE_NAME}.flatpakrepo</code></a></li>
+  <li><a href="../${FLATPAKREF_FILE}"><code>${FLATPAKREF_FILE}</code></a></li>
+  <li><a href="../${FLATPAKREPO_FILE}"><code>${FLATPAKREPO_FILE}</code></a></li>
   <li><a href="manifest.txt"><code>manifest.txt</code></a></li>
   <li><a href="config"><code>config</code></a> (ostree)</li>
   <li><a href="../">Site root</a></li>
@@ -110,20 +114,20 @@ cat > "$SITE_DIR/index.html" <<HTML
 <p class="muted">Not affiliated with, sponsored, or endorsed by Microsoft.</p>
 
 <h2>Install (adds this repo for updates)</h2>
-<pre>flatpak install --user --from ${pages_root}${APP_ID}.flatpakref
+<pre>flatpak install --user --from ${pages_root}${FLATPAKREF_FILE}
 flatpak run ${APP_ID}</pre>
 
 <h2>Add the remote only</h2>
 <pre>flatpak remote-add --if-not-exists --user --no-gpg-verify \\
-  ${REMOTE_NAME} ${pages_root}${REMOTE_NAME}.flatpakrepo
+  ${REMOTE_NAME} ${pages_root}${FLATPAKREPO_FILE}
 flatpak install --user ${REMOTE_NAME} ${APP_ID}//${BRANCH}
 flatpak update</pre>
 
 <h2>Links</h2>
 <ul>
-  <li><a href="${APP_ID}.flatpakref"><code>${APP_ID}.flatpakref</code></a></li>
-  <li><a href="${REMOTE_NAME}.flatpakrepo"><code>${REMOTE_NAME}.flatpakrepo</code></a></li>
-  <li><a href="repo/">Ostree repository (<code>repo/</code>)</a></li>
+  <li><a href="${FLATPAKREF_FILE}"><code>${FLATPAKREF_FILE}</code></a></li>
+  <li><a href="${FLATPAKREPO_FILE}"><code>${FLATPAKREPO_FILE}</code></a></li>
+  <li><a href="${OSTREE_SUBDIR}/">Ostree repository (<code>${OSTREE_SUBDIR}/</code>)</a></li>
   <li><a href="https://github.com/${OWNER}/${REPO_NAME}">Source on GitHub</a></li>
   <li><a href="https://github.com/${OWNER}/${REPO_NAME}/releases">GitHub Releases</a> (single-file <code>.flatpak</code> bundles)</li>
 </ul>

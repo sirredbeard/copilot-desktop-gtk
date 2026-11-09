@@ -1,6 +1,14 @@
-# Manual release: auto-bump patch, build AOT + Flatpak in the builder image,
-# publish GitHub Release assets, deploy the ostree repo to GitHub Pages so
-# flatpakref installs get updates via `flatpak update`.
+# Manual release: auto-bump patch, build AOT + Flatpak in the builder image
+# for both arches (x86_64 and aarch64, each on a runner of that arch),
+# publish GitHub Release assets, deploy the ostree repos to GitHub Pages
+# so flatpakref installs get updates via `flatpak update`.
+#
+# Pages layout: the x86_64 ostree repo stays at repo/ (the URL every
+# existing install already uses). The aarch64 repo sits next to it at
+# repo-aarch64/, with its own .flatpakref / .flatpakrepo files. Two
+# repos, not one merged repo: each arch keeps the exact signing and
+# static-delta flow build-flatpak.sh already proves per build, and no
+# merge step gets to break it.
 #
 # One-time Pages setup (GITHUB_TOKEN often cannot create the site):
 #   Settings → Pages → Source: GitHub Actions
@@ -30,13 +38,25 @@ jobs:
   # built from upstream WebKit main with our fork's fix cherry-picked on
   # top, only if upstream main or the fork branch moved since the last
   # cached build; otherwise this resolves in seconds via cache hit.
+  # x86_64 only: the aarch64 build has no overlay (see the Flatpak
+  # manifest's only-arches on the overlay module).
   webkit-dnd:
     uses: ./.github/workflows/webkit-dnd-rebuild.yml
     secrets: inherit
 
   build:
     needs: webkit-dnd
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            gh_arch: amd64
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            gh_arch: arm64
+    runs-on: ${{ matrix.runner }}
     container:
       image: ghcr.io/sirredbeard/copilot-desktop-gtk-builder:latest
       credentials:
@@ -52,6 +72,8 @@ jobs:
           fetch-depth: 0
 
       - name: Install gh CLI
+        env:
+          GH_ARCH: ${{ matrix.gh_arch }}
         run: |
           set -euo pipefail
           if command -v gh >/dev/null 2>&1; then
@@ -59,15 +81,15 @@ jobs:
             exit 0
           fi
           ver="$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
-          curl -fsSL "https://github.com/cli/cli/releases/download/${ver}/gh_${ver#v}_linux_amd64.tar.gz" | tar -xz -C /tmp
-          install -m755 "/tmp/gh_${ver#v}_linux_amd64/bin/gh" /usr/local/bin/gh
+          curl -fsSL "https://github.com/cli/cli/releases/download/${ver}/gh_${ver#v}_linux_${GH_ARCH}.tar.gz" | tar -xz -C /tmp
+          install -m755 "/tmp/gh_${ver#v}_linux_${GH_ARCH}/bin/gh" /usr/local/bin/gh
           gh --version
 
       - name: Next version
         id: ver
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -81,6 +103,7 @@ jobs:
           fi
 
       - name: Restore WebKit DND overlay artifact
+        if: matrix.arch == 'x86_64'
         uses: actions/cache/restore@v4
         with:
           path: dist/webkit-dnd-overlay
@@ -94,17 +117,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /root/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          key: nuget-${{ matrix.arch }}-${{ hashFiles('**/*.csproj') }}
           restore-keys: |
-            nuget-${{ runner.os }}-
+            nuget-${{ matrix.arch }}-
 
       - name: Restore Flatpak ostree repo cache
         uses: actions/cache@v4
         with:
           path: dist/flatpak-repo
-          key: flatpak-ostree-${{ github.run_id }}
+          key: flatpak-ostree-${{ matrix.arch }}-${{ github.run_id }}
           restore-keys: |
-            flatpak-ostree-
+            flatpak-ostree-${{ matrix.arch }}-
 
       - name: Build AOT + Flatpak
         env:
@@ -127,30 +150,19 @@ jobs:
             "dist/flatpak/${{ env.APP_ID }}-${V}.flatpak"
           find dist/publish dist/flatpak dist/flatpak-repo -maxdepth 2 -type f -printf '%s %p\n' | sort -n | tail -40
 
-      - name: Stage GitHub Pages site
-        env:
-          PAGES_OWNER: ${{ github.repository_owner }}
-          PAGES_REPO: ${{ github.event.repository.name }}
-          FLATPAK_APP_ID: ${{ env.APP_ID }}
-          FLATPAK_APP_TITLE: Copilot
-          FLATPAK_BRANCH: stable
-        run: |
-          set -euo pipefail
-          ./scripts/stage-flatpak-pages.sh dist/flatpak-repo dist/pages-site
-          test -f dist/pages-site/.nojekyll
-          test -f dist/pages-site/index.html
-          test -f dist/pages-site/repo/config
-          test -f "dist/pages-site/${{ env.APP_ID }}.flatpakref"
-          test -f "dist/pages-site/${{ github.event.repository.name }}.flatpakrepo"
-
+      # Pages staging happens in the publish job, which has both arches.
+      # Upload everything it needs: binary, bundle, the signed ostree
+      # repo, the mirrored AppStream media, and the exported public key.
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ steps.ver.outputs.version }}
+          name: release-${{ steps.ver.outputs.version }}-${{ matrix.arch }}
           path: |
             dist/publish/copilot-desktop-gtk
             dist/flatpak/${{ env.APP_ID }}-${{ steps.ver.outputs.version }}.flatpak
-            dist/pages-site
+            dist/flatpak-repo
+            dist/flatpak-media
+            dist/flatpak-repo-public.asc
           if-no-files-found: error
 
   publish:
@@ -164,10 +176,12 @@ jobs:
       tag: ${{ needs.build.outputs.tag }}
       page_url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release-${{ needs.build.outputs.version }}
+          pattern: release-${{ needs.build.outputs.version }}-*
           path: artifacts
 
       - name: Layout artifacts
@@ -177,35 +191,91 @@ jobs:
           V="${{ needs.build.outputs.version }}"
           TAG="${{ needs.build.outputs.tag }}"
           APP_ID="${{ env.APP_ID }}"
-          # upload-artifact keeps paths under dist/ stripped to publish/, flatpak/, pages-site/
+          X64="artifacts/release-${V}-x86_64"
+          ARM="artifacts/release-${V}-aarch64"
           ls -la artifacts || true
-          ls -la artifacts/publish artifacts/flatpak artifacts/pages-site 2>/dev/null || true
-          BIN=""
-          for cand in             "artifacts/publish/copilot-desktop-gtk"             "artifacts/dist/publish/copilot-desktop-gtk"             "artifacts/copilot-desktop-gtk"; do
-            if [[ -f "$cand" ]]; then BIN="$cand"; break; fi
+          ls -la "$X64" "$ARM" 2>/dev/null || true
+          # upload-artifact strips the common dist/ prefix, so each arch
+          # dir holds publish/, flatpak/, flatpak-repo/, flatpak-media/.
+          BIN_X64="${X64}/publish/copilot-desktop-gtk"
+          BIN_ARM="${ARM}/publish/copilot-desktop-gtk"
+          BUNDLE_X64="${X64}/flatpak/${APP_ID}-${V}.flatpak"
+          BUNDLE_ARM="${ARM}/flatpak/${APP_ID}-${V}.flatpak"
+          REPO_X64="${X64}/flatpak-repo"
+          REPO_ARM="${ARM}/flatpak-repo"
+          for f in "$BIN_X64" "$BIN_ARM" "$BUNDLE_X64" "$BUNDLE_ARM"; do
+            if [[ ! -f "$f" ]]; then
+              echo "missing artifact file: $f" >&2
+              find artifacts -maxdepth 4 \( -type f -o -type d \) -print | sed -n '1,120p' || true
+              exit 1
+            fi
           done
-          BUNDLE=""
-          for cand in             "artifacts/flatpak/${APP_ID}-${V}.flatpak"             "artifacts/dist/flatpak/${APP_ID}-${V}.flatpak"             "artifacts/${APP_ID}-${V}.flatpak"; do
-            if [[ -f "$cand" ]]; then BUNDLE="$cand"; break; fi
+          for d in "$REPO_X64" "$REPO_ARM"; do
+            if [[ ! -f "$d/config" ]]; then
+              echo "missing ostree repo: $d" >&2
+              exit 1
+            fi
           done
-          SITE=""
-          for cand in artifacts/pages-site artifacts/dist/pages-site; do
-            if [[ -d "$cand" ]]; then SITE="$cand"; break; fi
-          done
-          if [[ -z "$BIN" || -z "$BUNDLE" || -z "$SITE" ]]; then
-            echo "missing artifacts (bin='$BIN' bundle='$BUNDLE' site='$SITE')" >&2
-            find artifacts -maxdepth 4 \( -type f -o -type d \) -print | sed -n '1,80p' || true
-            exit 1
+          # Release assets get arch suffixes: the two binaries and the
+          # two bundles have the same base names per arch and would
+          # collide on one Release without them.
+          mkdir -p release-assets
+          cp "$BIN_X64" "release-assets/copilot-desktop-gtk-x86_64"
+          cp "$BIN_ARM" "release-assets/copilot-desktop-gtk-aarch64"
+          cp "$BUNDLE_X64" "release-assets/${APP_ID}-${V}-x86_64.flatpak"
+          cp "$BUNDLE_ARM" "release-assets/${APP_ID}-${V}-aarch64.flatpak"
+          chmod +x release-assets/copilot-desktop-gtk-x86_64 release-assets/copilot-desktop-gtk-aarch64
+          # stage-flatpak-pages.sh reads mirrored media and the exported
+          # public key from dist/ under the repo root. Both are
+          # arch-independent; take the x86_64 copies.
+          mkdir -p dist
+          if [[ -d "${X64}/flatpak-media" ]]; then
+            cp -a "${X64}/flatpak-media" dist/flatpak-media
           fi
-          chmod +x "$BIN"
-          test -f "$SITE/repo/config"
+          if [[ -f "${X64}/flatpak-repo-public.asc" ]]; then
+            cp "${X64}/flatpak-repo-public.asc" dist/flatpak-repo-public.asc
+          fi
           {
-            echo "bin=$BIN"
-            echo "bundle=$BUNDLE"
-            echo "site=$SITE"
+            echo "bin_x64=release-assets/copilot-desktop-gtk-x86_64"
+            echo "bin_arm=release-assets/copilot-desktop-gtk-aarch64"
+            echo "bundle_x64=release-assets/${APP_ID}-${V}-x86_64.flatpak"
+            echo "bundle_arm=release-assets/${APP_ID}-${V}-aarch64.flatpak"
+            echo "repo_x64=${REPO_X64}"
+            echo "repo_arm=${REPO_ARM}"
             echo "version=$V"
             echo "tag=$TAG"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Stage GitHub Pages site
+        env:
+          PAGES_OWNER: ${{ github.repository_owner }}
+          PAGES_REPO: ${{ github.event.repository.name }}
+          FLATPAK_APP_ID: ${{ env.APP_ID }}
+          FLATPAK_APP_TITLE: Copilot
+          FLATPAK_BRANCH: stable
+        run: |
+          set -euo pipefail
+          APP_ID="${{ env.APP_ID }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          SITE="dist/pages-site"
+          # x86_64 repo at repo/ - the URL existing installs already use.
+          ./scripts/stage-flatpak-pages.sh "${{ steps.files.outputs.repo_x64 }}" "$SITE"
+          test -f "$SITE/.nojekyll"
+          test -f "$SITE/index.html"
+          test -f "$SITE/repo/config"
+          test -f "$SITE/${APP_ID}.flatpakref"
+          test -f "$SITE/${REPO_NAME}.flatpakrepo"
+          # aarch64 repo at repo-aarch64/, staged into a scratch site
+          # (the script wipes its target), then merged into the real one.
+          FLATPAK_OSTREE_SUBDIR=repo-aarch64 \
+          FLATPAKREF_FILE="${APP_ID}-aarch64.flatpakref" \
+          FLATPAKREPO_FILE="${REPO_NAME}-aarch64.flatpakrepo" \
+            ./scripts/stage-flatpak-pages.sh "${{ steps.files.outputs.repo_arm }}" "dist/pages-site-arm"
+          cp -a "dist/pages-site-arm/repo-aarch64" "$SITE/"
+          cp "dist/pages-site-arm/${APP_ID}-aarch64.flatpakref" "$SITE/"
+          cp "dist/pages-site-arm/${REPO_NAME}-aarch64.flatpakrepo" "$SITE/"
+          test -f "$SITE/repo-aarch64/config"
+          test -f "$SITE/${APP_ID}-aarch64.flatpakref"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -215,7 +285,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ steps.files.outputs.site }}
+          path: dist/pages-site
 
       - name: Deploy to GitHub Pages
         id: deploy
@@ -223,29 +293,37 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="${{ steps.files.outputs.tag }}"
-          BIN="${{ steps.files.outputs.bin }}"
-          BUNDLE="${{ steps.files.outputs.bundle }}"
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.event.repository.name }}"
           PAGES="https://${OWNER}.github.io/${REPO}/"
+          APP_ID="${{ env.APP_ID }}"
           # Keep this short. The .flatpakref declares RuntimeRepo=flathub so
           # flatpak pulls org.gnome.Platform without a separate install step.
           notes="$(cat <<NOTES
           ## Install from GitHub
 
+          x86_64:
           \`\`\`bash
           flatpak install --user --from ${PAGES}com.github.sirredbeard.copilot-desktop-gtk.flatpakref
           flatpak run com.github.sirredbeard.copilot-desktop-gtk
           \`\`\`
 
+          aarch64:
+          \`\`\`bash
+          flatpak install --user --from ${PAGES}com.github.sirredbeard.copilot-desktop-gtk-aarch64.flatpakref
+          flatpak run com.github.sirredbeard.copilot-desktop-gtk
+          \`\`\`
+
+          The aarch64 build ships without the patched WebKitGTK overlay, so external file drag-and-drop is limited there. Everything else is the same app.
+
           ## Artifacts on this release
 
-          * \`.flatpak\` bundle - offline install
-          * \`copilot-desktop-gtk\` - bare Native AOT binary
+          * \`.flatpak\` bundles - offline install, one per arch (\`-x86_64\`, \`-aarch64\`)
+          * \`copilot-desktop-gtk-x86_64\` / \`copilot-desktop-gtk-aarch64\` - bare Native AOT binaries
           NOTES
           )"
           # strip leading spaces from heredoc for cleaner notes
@@ -255,8 +333,10 @@ jobs:
             --target "${{ github.sha }}" \
             --title "$TAG" \
             --notes "$notes" \
-            "$BIN" \
-            "$BUNDLE"
+            "${{ steps.files.outputs.bin_x64 }}" \
+            "${{ steps.files.outputs.bin_arm }}" \
+            "${{ steps.files.outputs.bundle_x64 }}" \
+            "${{ steps.files.outputs.bundle_arm }}"
 
       - name: Wait for Pages repo config
         env:
@@ -264,26 +344,46 @@ jobs:
           REPO: ${{ github.event.repository.name }}
         run: |
           set -euo pipefail
-          url="https://${OWNER}.github.io/${REPO}/repo/config"
-          echo "Polling $url"
+          base="https://${OWNER}.github.io/${REPO}"
+          echo "Polling $base/repo/config and $base/repo-aarch64/config"
           for i in $(seq 1 24); do
-            code="$(curl -sS -o /tmp/ostree-config -w '%{http_code}' --location "$url" || true)"
-            echo "attempt $i: HTTP $code"
-            if [ "$code" = "200" ] && grep -q '\[core\]' /tmp/ostree-config; then
-              echo "Pages Flatpak repo is live"
-              head -5 /tmp/ostree-config
-              curl -fsSL "https://${OWNER}.github.io/${REPO}/" | head -8 || true
+            ok=1
+            for sub in repo repo-aarch64; do
+              code="$(curl -sS -o "/tmp/ostree-config-${sub}" -w '%{http_code}' --location "$base/${sub}/config" || true)"
+              echo "attempt $i (${sub}): HTTP $code"
+              if [ "$code" != "200" ] || ! grep -q '\[core\]' "/tmp/ostree-config-${sub}"; then
+                ok=0
+              fi
+            done
+            if [ "$ok" = "1" ]; then
+              echo "Pages Flatpak repos are live (x86_64 + aarch64)"
+              curl -fsSL "${base}/" | head -8 || true
               exit 0
             fi
             sleep 10
           done
-          echo "Timed out waiting for Pages to serve repo/config" >&2
+          echo "Timed out waiting for Pages to serve repo config" >&2
           exit 1
 
-  # Fresh builder container: install from live Pages remote (no .flatpak bundle).
+  # Fresh builder container per arch: install from that arch's live
+  # Pages remote (no .flatpak bundle).
   verify-pages-install:
     needs: publish
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            ostree_subdir: repo
+            flatpakref_file: com.github.sirredbeard.copilot-desktop-gtk.flatpakref
+            flatpakrepo_file: copilot-desktop-gtk.flatpakrepo
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            ostree_subdir: repo-aarch64
+            flatpakref_file: com.github.sirredbeard.copilot-desktop-gtk-aarch64.flatpakref
+            flatpakrepo_file: copilot-desktop-gtk-aarch64.flatpakrepo
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -308,4 +408,16 @@ jobs:
         run: |
           set -euo pipefail
           PAGES="https://${OWNER}.github.io/${REPO}/"
-          docker run --rm --privileged             -e PAGES_OWNER="$OWNER"             -e PAGES_REPO="$REPO"             -e FLATPAK_APP_ID="$APP_ID"             -e FLATPAK_REMOTE_NAME="$REPO"             -e FLATPAK_BRANCH=stable             -v "$PWD:/src:ro"             -w /src             "${{ env.BUILDER }}"             ./scripts/verify-flatpak-repo-install.sh "$VERSION" "$PAGES"
+          docker run --rm --privileged \
+            -e PAGES_OWNER="$OWNER" \
+            -e PAGES_REPO="$REPO" \
+            -e FLATPAK_APP_ID="$APP_ID" \
+            -e FLATPAK_REMOTE_NAME="$REPO" \
+            -e FLATPAK_BRANCH=stable \
+            -e FLATPAK_OSTREE_SUBDIR="${{ matrix.ostree_subdir }}" \
+            -e FLATPAKREF_FILE="${{ matrix.flatpakref_file }}" \
+            -e FLATPAKREPO_FILE="${{ matrix.flatpakrepo_file }}" \
+            -v "$PWD:/src:ro" \
+            -w /src \
+            "${{ env.BUILDER }}" \
+            ./scripts/verify-flatpak-repo-install.sh "$VERSION" "$PAGES"

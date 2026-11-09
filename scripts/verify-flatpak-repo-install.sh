@@ -5,7 +5,11 @@
 #   .flatpak bundle), assert version/origin, and confirm the remote stays
 #   configured so flatpak update can see later builds.
 # Usage:   ./scripts/verify-flatpak-repo-install.sh <version> [pages_root_url]
-# Env:     FLATPAK_APP_ID, FLATPAK_REMOTE_NAME, FLATPAK_BRANCH
+# Env:     FLATPAK_APP_ID, FLATPAK_REMOTE_NAME, FLATPAK_BRANCH,
+#          FLATPAK_OSTREE_SUBDIR, FLATPAKREF_FILE, FLATPAKREPO_FILE
+#   Defaults verify the x86_64 repo (subdir "repo", default file
+#   names). The aarch64 verify passes subdir "repo-aarch64" and the
+#   -aarch64 file names, matching stage-flatpak-pages.sh.
 # CI:      Yes (post Pages deploy).
 
 set -euo pipefail
@@ -18,9 +22,10 @@ PAGES_ROOT="${PAGES_ROOT%/}/"
 APP_ID="${FLATPAK_APP_ID:-com.github.sirredbeard.copilot-desktop-gtk}"
 REMOTE_NAME="${FLATPAK_REMOTE_NAME:-$REPO_NAME}"
 BRANCH="${FLATPAK_BRANCH:-stable}"
-REPO_URL="${PAGES_ROOT}repo/"
-FLATPAKREF_URL="${PAGES_ROOT}${APP_ID}.flatpakref"
-FLATPAKREPO_URL="${PAGES_ROOT}${REMOTE_NAME}.flatpakrepo"
+OSTREE_SUBDIR="${FLATPAK_OSTREE_SUBDIR:-repo}"
+REPO_URL="${PAGES_ROOT}${OSTREE_SUBDIR}/"
+FLATPAKREF_URL="${PAGES_ROOT}${FLATPAKREF_FILE:-${APP_ID}.flatpakref}"
+FLATPAKREPO_URL="${PAGES_ROOT}${FLATPAKREPO_FILE:-${REMOTE_NAME}.flatpakrepo}"
 
 WORKDIR="${TMPDIR:-/tmp}/flatpak-pages-verify-$$"
 mkdir -p "$WORKDIR"
@@ -113,7 +118,7 @@ if [[ -z "$remote_url" || "$remote_url" == "-" ]]; then
 fi
 echo "remote url: $remote_url"
 case "$remote_url" in
-  *"${OWNER}.github.io/${REPO_NAME}/repo"*) ;;
+  *"${OWNER}.github.io/${REPO_NAME}/${OSTREE_SUBDIR}"*) ;;
   *)
     echo "error: remote URL does not point at Pages ostree ($remote_url)" >&2
     cat "$WORKDIR/remotes.txt" >&2 || true
